@@ -238,6 +238,8 @@ export default function App() {
           activeShift={activeShift}
           onOpenShiftModal={() => setShowOpenShiftModal(true)}
           onOpenSidebar={() => setIsSidebarOpen(true)}
+          headerSearch={headerSearch}
+          onNavigateView={setActiveView}
         />
       )}
 

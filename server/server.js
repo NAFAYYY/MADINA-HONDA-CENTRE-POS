@@ -74,7 +74,26 @@ app.get('/api/products', (req, res) => {
 
   sql += ' ORDER BY name ASC';
   const products = db.prepare(sql).all(...params);
+
+  // Attach wholesale quantity slabs for dynamic volume pricing
+  const allSlabs = db.prepare('SELECT product_id, min_quantity, dealer_price, retail_price, ex_factory_price, sales_tax FROM product_pricing_slabs ORDER BY min_quantity ASC').all();
+  const slabsMap = {};
+  for (const s of allSlabs) {
+    if (!slabsMap[s.product_id]) slabsMap[s.product_id] = [];
+    slabsMap[s.product_id].push(s);
+  }
+  for (const p of products) {
+    p.slabs = slabsMap[p.id] || [];
+  }
+
   res.json(products);
+});
+
+// Get slabs for specific product
+app.get('/api/products/:id/slabs', (req, res) => {
+  const { id } = req.params;
+  const slabs = db.prepare('SELECT * FROM product_pricing_slabs WHERE product_id = ? ORDER BY min_quantity ASC').all(id);
+  res.json(slabs);
 });
 
 // Manual Single Part Addition
@@ -139,13 +158,14 @@ app.put('/api/products/:id', (req, res) => {
         abc_category = COALESCE(?, abc_category)
       WHERE id = ?
     `).run(
-      name, shelf_location,
+      name !== undefined ? name : null,
+      shelf_location !== undefined ? shelf_location : null,
       cost_price !== undefined ? Number(cost_price) : null,
       retail_price !== undefined ? Number(retail_price) : null,
       wholesale_price !== undefined ? Number(wholesale_price) : null,
       stock_quantity !== undefined ? Number(stock_quantity) : null,
       min_stock_alert !== undefined ? Number(min_stock_alert) : null,
-      abc_category,
+      abc_category !== undefined ? abc_category : null,
       id
     );
     res.json({ success: true });
@@ -558,6 +578,21 @@ app.post('/api/workshop/gate-pass/verify', (req, res) => {
   res.json({ valid: true, message: 'Gate Pass Verified! Bike Authorized for Release.', job });
 });
 
+// GET Gate Pass lookup
+app.get('/api/workshop/gate-pass/:code', (req, res) => {
+  const { code } = req.params;
+  const job = db.prepare(`
+    SELECT jc.*, v.reg_number, v.model as vehicle_model, c.name as customer_name
+    FROM job_cards jc
+    JOIN vehicles v ON jc.vehicle_id = v.id
+    JOIN customers c ON jc.customer_id = c.id
+    WHERE jc.gate_pass_code = ?
+  `).get(code.trim().toUpperCase());
+
+  if (!job) return res.status(404).json({ valid: false, error: 'Invalid Gate Pass Code' });
+  res.json({ valid: job.status === 'paid_delivered', status: job.status, job });
+});
+
 // ==========================================
 // 4. 3-IN-1 POINT OF SALE (POS) BILLING
 // ==========================================
@@ -605,25 +640,34 @@ app.post('/api/pos/checkout', (req, res) => {
       }
 
       for (const item of items) {
-        const product = db.prepare('SELECT stock_quantity, cost_price FROM products WHERE id = ?').get(item.product_id);
+        const product = db.prepare('SELECT part_number, name, stock_quantity, cost_price, retail_price, wholesale_price FROM products WHERE id = ?').get(item.product_id);
         if (!product || product.stock_quantity < item.quantity) {
-          return res.status(400).json({ error: `Not enough stock for ${item.name}` });
+          return res.status(400).json({ error: `Not enough stock for ${item.name || product?.name || 'item'}` });
         }
 
         // Deduct inventory
         db.prepare('UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?').run(item.quantity, item.product_id);
 
-        const itemTotal = item.unit_price * item.quantity;
+        let unitPrice = Number(item.unit_price);
+        if (stream === 'b2b_wholesale') {
+          // If a volume wholesale slab exists for this quantity, apply official dealer slab price
+          const matchingSlab = db.prepare('SELECT dealer_price FROM product_pricing_slabs WHERE product_id = ? AND min_quantity <= ? ORDER BY min_quantity DESC LIMIT 1').get(item.product_id, item.quantity);
+          if (matchingSlab && matchingSlab.dealer_price) {
+            unitPrice = matchingSlab.dealer_price;
+          }
+        }
+
+        const itemTotal = unitPrice * Number(item.quantity);
         subtotal += itemTotal;
-        cost_total += product.cost_price * item.quantity;
+        cost_total += (product.cost_price || 0) * Number(item.quantity);
 
         saleItems.push({
           product_id: item.product_id,
-          part_number: item.part_number,
-          name: item.name,
-          quantity: item.quantity,
-          unit_cost: product.cost_price,
-          unit_price: item.unit_price,
+          part_number: item.part_number || product.part_number || '',
+          name: item.name || product.name || 'Spare Part',
+          quantity: Number(item.quantity),
+          unit_cost: product.cost_price || 0,
+          unit_price: unitPrice,
           total_price: itemTotal
         });
       }
@@ -657,7 +701,16 @@ app.post('/api/pos/checkout', (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const si of saleItems) {
-        insertItem.run(sale_id, si.product_id, si.part_number, si.name, si.quantity, si.unit_cost, si.unit_price, si.total_price);
+        insertItem.run(
+          sale_id,
+          si.product_id,
+          si.part_number || '',
+          si.name || 'Part',
+          si.quantity,
+          si.unit_cost || 0,
+          si.unit_price || 0,
+          si.total_price || 0
+        );
       }
     }
 
@@ -703,6 +756,22 @@ app.post('/api/pos/checkout', (req, res) => {
           INSERT INTO khata_ledger (party_type, party_id, invoice_number, type, amount, balance_after, notes)
           VALUES ('customer', ?, ?, 'sale_credit', ?, ?, 'Retail sale on credit')
         `).run(customer_id, invoiceNumber, grand_total, cust.current_balance);
+      } else if (customer_name && customer_name !== 'Walk-in Customer') {
+        let cust = db.prepare('SELECT id, current_balance FROM customers WHERE phone = ?').get(customer_phone || '');
+        if (!cust) {
+          const custRes = db.prepare('INSERT INTO customers (name, phone, current_balance) VALUES (?, ?, ?)')
+            .run(customer_name, customer_phone || '', grand_total);
+          db.prepare(`
+            INSERT INTO khata_ledger (party_type, party_id, invoice_number, type, amount, balance_after, notes)
+            VALUES ('customer', ?, ?, 'sale_credit', ?, ?, 'Retail sale on credit')
+          `).run(custRes.lastInsertRowid, invoiceNumber, grand_total, grand_total);
+        } else {
+          db.prepare('UPDATE customers SET current_balance = current_balance + ? WHERE id = ?').run(grand_total, cust.id);
+          db.prepare(`
+            INSERT INTO khata_ledger (party_type, party_id, invoice_number, type, amount, balance_after, notes)
+            VALUES ('customer', ?, ?, 'sale_credit', ?, ?, 'Retail sale on credit')
+          `).run(cust.id, invoiceNumber, grand_total, cust.current_balance + grand_total);
+        }
       }
     }
 
@@ -865,6 +934,13 @@ app.post('/api/mechanics/:id/charge-part', (req, res) => {
   }
 });
 
+// Get Mechanic Ledger entries
+app.get('/api/mechanics/:id/ledger', (req, res) => {
+  const { id } = req.params;
+  const ledger = db.prepare('SELECT * FROM mechanic_ledger WHERE mechanic_id = ? ORDER BY id DESC').all(id);
+  res.json(ledger);
+});
+
 // Daily Sheet / Settlement Calculator
 app.get('/api/mechanics/:id/daily-sheet', (req, res) => {
   const { id } = req.params;
@@ -941,10 +1017,11 @@ app.get('/api/complaints', (req, res) => {
 
 // Search bike service history by reg or chassis number (reveals original mechanic!)
 app.get('/api/complaints/lookup', (req, res) => {
-  const { search } = req.query;
-  if (!search) return res.json([]);
+  const { search, query } = req.query;
+  const termParam = search || query;
+  if (!termParam) return res.json([]);
 
-  const term = `%${search.trim().toUpperCase()}%`;
+  const term = `%${termParam.trim().toUpperCase()}%`;
   const history = db.prepare(`
     SELECT jc.*,
            v.model as vehicle_model, v.reg_number, v.chassis_number,
@@ -961,11 +1038,63 @@ app.get('/api/complaints/lookup', (req, res) => {
   res.json(history);
 });
 
+// Alias for complaints trace
+app.get('/api/complaints/trace', (req, res) => {
+  const { search, query } = req.query;
+  const termParam = search || query;
+  if (!termParam) return res.json({ history: [] });
+
+  const term = `%${termParam.trim().toUpperCase()}%`;
+  const history = db.prepare(`
+    SELECT jc.*,
+           v.model as vehicle_model, v.reg_number, v.chassis_number,
+           c.name as customer_name, c.phone as customer_phone,
+           m.name as mechanic_name, m.id as mechanic_id
+    FROM job_cards jc
+    JOIN vehicles v ON jc.vehicle_id = v.id
+    JOIN customers c ON jc.customer_id = c.id
+    LEFT JOIN mechanics m ON jc.mechanic_id = m.id
+    WHERE v.reg_number LIKE ? OR v.chassis_number LIKE ?
+    ORDER BY jc.id DESC
+  `).all(term, term);
+
+  res.json({ history });
+});
+
 // Create Complaint Ticket & Auto-Reassign to Same Mechanic
 app.post('/api/complaints', (req, res) => {
-  const { customer_name, customer_phone, reg_number, chassis_number, original_job_id, assigned_mechanic_id, issue_description, is_warranty } = req.body;
+  const {
+    customer_name, customer_phone, reg_number, chassis_number,
+    original_job_id, assigned_mechanic_id, issue_description, complaint_details, is_warranty, is_free_rework
+  } = req.body;
 
   try {
+    let cName = customer_name;
+    let rNum = reg_number;
+    let mId = assigned_mechanic_id;
+    let chNum = chassis_number || '';
+    let phone = customer_phone || '';
+
+    if (original_job_id) {
+      const orig = db.prepare(`
+        SELECT jc.*, v.reg_number, v.chassis_number, c.name as customer_name, c.phone as customer_phone, jc.mechanic_id
+        FROM job_cards jc
+        JOIN vehicles v ON jc.vehicle_id = v.id
+        JOIN customers c ON jc.customer_id = c.id
+        WHERE jc.id = ?
+      `).get(original_job_id);
+      if (orig) {
+        if (!cName) cName = orig.customer_name;
+        if (!rNum) rNum = orig.reg_number;
+        if (!mId) mId = orig.mechanic_id;
+        if (!chNum) chNum = orig.chassis_number || '';
+        if (!phone) phone = orig.customer_phone || '';
+      }
+    }
+
+    const desc = issue_description || complaint_details || 'Customer reported complaint';
+    const warrantyFlag = (is_warranty !== undefined ? is_warranty : is_free_rework) ? 1 : 0;
+
     const countRow = db.prepare('SELECT COUNT(*) as count FROM complaints').get();
     const ticketNumber = `CMP-${new Date().getFullYear()}-${String(countRow.count + 1).padStart(4, '0')}`;
 
@@ -975,8 +1104,15 @@ app.post('/api/complaints', (req, res) => {
         original_job_id, assigned_mechanic_id, issue_description, is_warranty, status
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')
     `).run(
-      ticketNumber, customer_name, customer_phone || '', reg_number.toUpperCase(), chassis_number || '',
-      original_job_id || null, assigned_mechanic_id || null, issue_description, is_warranty ? 1 : 0
+      ticketNumber,
+      cName || 'Customer',
+      phone,
+      (rNum || 'UNREG').toUpperCase(),
+      chNum,
+      original_job_id || null,
+      mId || null,
+      desc,
+      warrantyFlag
     );
 
     res.json({ success: true, ticket_number: ticketNumber });
@@ -1169,7 +1305,7 @@ app.post('/api/expenses', (req, res) => {
 // ==========================================
 // 9. OWNER'S CONNECTED ANALYTICS DASHBOARD
 // ==========================================
-app.get('/api/analytics/dashboard', (req, res) => {
+app.get(['/api/analytics/dashboard', '/api/analytics/summary'], (req, res) => {
   try {
     // Today's summary
     const todaySales = db.prepare(`

@@ -153,6 +153,7 @@ Clicking the top-left menu icon (`☰`) opens the sleek sidebar drawer:
 | **Frontend Framework** | **React 19 + Vite** | Blazing-fast development, sub-second Hot Module Replacement, zero bundle bloat. |
 | **Styling & Design** | **Custom Vanilla CSS Tokens** | Authentic Aronium Lite pixel-perfect dark theme + High-contrast Daylight POS theme. No bulky CSS frameworks. |
 | **Icons & Barcodes** | **Lucide-React + JsBarcode** | Automotive-grade icons and client-side Code128 thermal barcode rendering. |
+| **Data Visualization** | **Recharts** | Interactive charts for Owner Analytics (revenue trends, parts vs. labor breakdown). |
 | **Backend Server** | **Node.js + Express** | Lightweight, high throughput, binds to `0.0.0.0` for local network access. |
 | **Database Engine** | **SQLite (`node:sqlite`)** | **Built directly into modern Node.js**. Zero external server setup, zero node-gyp C++ compiler hassle on Windows. High-speed WAL mode with crash resistance. |
 | **File Processing** | **Multer + SheetJS (XLSX)** | Fast Excel (.xlsx) and CSV spreadsheet parsing for bulk price list imports. |
@@ -237,6 +238,10 @@ The system includes pre-seeded user accounts for testing:
 | **Workshop Supervisor** | `supervisor` | `supervisor123` | **Workshop Operations**: Bike intake, assigning lifts & mechanics, adding parts consumed, complaints & re-work tickets. |
 
 *You can switch roles instantly using the role dropdown in the sidebar.*
+
+> [!WARNING]
+> **Production Security Notice:**
+> The credentials above are default seed accounts provided for development and testing. Before deploying the system in a live shop environment or connecting to a shared network, update all default passwords via user settings or the database to safeguard business margins, cost prices, and cash drawer balances.
 
 ---
 

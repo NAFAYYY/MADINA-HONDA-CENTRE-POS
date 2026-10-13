@@ -86,6 +86,21 @@ export function initDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Quantity Wholesale Pricing Slabs (Scheme Slabs)
+    CREATE TABLE IF NOT EXISTS product_pricing_slabs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id INTEGER NOT NULL,
+      part_number TEXT NOT NULL,
+      min_quantity INTEGER NOT NULL,
+      dealer_price REAL NOT NULL,
+      retail_price REAL NOT NULL,
+      ex_factory_price REAL,
+      sales_tax REAL,
+      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_slabs_part ON product_pricing_slabs(part_number);
+    CREATE INDEX IF NOT EXISTS idx_slabs_prod ON product_pricing_slabs(product_id);
+
     -- Customers
     CREATE TABLE IF NOT EXISTS customers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -326,43 +341,66 @@ function seedInitialData() {
     insertMech.run('Muhammad Asif (Electrical)', '0333-5678901', 50.0, 0.0, 0.0);
   }
 
-  // Check if products exist
+  // Check if products exist, otherwise load official Atlas Honda catalog (1,726 products + 2,220 slabs)
   const productCheck = db.prepare('SELECT COUNT(*) as count FROM products').get();
   if (productCheck.count === 0) {
-    const insertProduct = db.prepare(`
-      INSERT INTO products (
-        part_number, name, model_compat, category, brand, shelf_location,
-        cost_price, retail_price, wholesale_price, stock_quantity, min_stock_alert,
-        barcode, abc_category
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    const catalogPath = path.join(dataDir, 'official_honda_catalog.json');
+    if (fs.existsSync(catalogPath)) {
+      try {
+        const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+        const insertProduct = db.prepare(`
+          INSERT INTO products (
+            part_number, name, model_compat, category, brand, shelf_location,
+            cost_price, retail_price, wholesale_price, stock_quantity, min_stock_alert,
+            barcode, abc_category
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
 
-    // Popular Atlas Honda & Aftermarket parts
-    const sampleParts = [
-      ['08232-2MA-K1L', 'Honda 4T 20W-50 Engine Oil (0.7 Liter)', 'CD70', 'Engine Oil / Fluids', 'Atlas Honda', 'Rack A - Shelf 1', 680, 850, 780, 48, 12, '89640001001', 'A'],
-      ['08232-2MA-K2L', 'Honda 4T 20W-50 Engine Oil (1.0 Liter)', 'CG125', 'Engine Oil / Fluids', 'Atlas Honda', 'Rack A - Shelf 1', 950, 1180, 1080, 36, 10, '89640001002', 'A'],
-      ['08232-2MA-K3L', 'Honda 4T 20W-50 Engine Oil (0.8 Liter)', 'Pridor', 'Engine Oil / Fluids', 'Atlas Honda', 'Rack A - Shelf 1', 790, 990, 900, 24, 8, '89640001003', 'A'],
-      ['98056-57716', 'Spark Plug C7HSA (Genuine)', 'CD70', 'Genuine Honda', 'Atlas Honda', 'Rack B - Shelf 2', 240, 340, 290, 60, 15, '89640002001', 'A'],
-      ['98069-58716', 'Spark Plug D8EA (Genuine)', 'CG125', 'Genuine Honda', 'Atlas Honda', 'Rack B - Shelf 2', 260, 370, 310, 45, 12, '89640002002', 'A'],
-      ['22870-198-D10', 'Clutch Cable Assembly', 'CD70', 'Genuine Honda', 'Atlas Honda', 'Rack C - Shelf 1', 190, 290, 240, 30, 8, '89640003001', 'A'],
-      ['22870-KYA-600', 'Clutch Cable Assembly (Self Start)', 'CG125', 'Genuine Honda', 'Atlas Honda', 'Rack C - Shelf 1', 230, 350, 290, 25, 6, '89640003002', 'A'],
-      ['45450-086-010', 'Front Brake Cable Assembly', 'CD70', 'Genuine Honda', 'Atlas Honda', 'Rack C - Shelf 2', 180, 280, 230, 28, 6, '89640003003', 'A'],
-      ['43125-086-000', 'Brake Shoe Set Front/Rear (Genuine)', 'CD70', 'Genuine Honda', 'Atlas Honda', 'Rack D - Shelf 1', 420, 620, 520, 35, 10, '89640004001', 'A'],
-      ['43125-KGA-900', 'Brake Shoe Set Rear (Genuine)', 'CG125', 'Genuine Honda', 'Atlas Honda', 'Rack D - Shelf 1', 520, 750, 640, 25, 8, '89640004002', 'A'],
-      ['CR-BS-70', 'Crown Brake Shoe Set (Cost-Effective)', 'CD70', 'Aftermarket / Local', 'Crown', 'Rack D - Shelf 2', 220, 350, 280, 40, 10, '89640004003', 'A'],
-      ['40530-086-000', 'Drive Chain 428-100L (Genuine)', 'CD70', 'Genuine Honda', 'Atlas Honda', 'Rack E - Shelf 1', 950, 1350, 1150, 18, 5, '89640005001', 'B'],
-      ['40530-397-000', 'Drive Chain 428-104L (Genuine)', 'CG125', 'Genuine Honda', 'Atlas Honda', 'Rack E - Shelf 1', 1150, 1600, 1380, 15, 4, '89640005002', 'B'],
-      ['17211-198-D10', 'Air Filter Element', 'CD70', 'Genuine Honda', 'Atlas Honda', 'Rack B - Shelf 3', 180, 270, 220, 32, 8, '89640006001', 'A'],
-      ['17211-KGA-900', 'Air Filter Element', 'CG125', 'Genuine Honda', 'Atlas Honda', 'Rack B - Shelf 3', 250, 380, 310, 22, 6, '89640006002', 'A'],
-      ['22201-166-000', 'Clutch Plate Friction Disc Set', 'CD70', 'Genuine Honda', 'Atlas Honda', 'Rack F - Shelf 1', 680, 980, 840, 20, 5, '89640007001', 'B'],
-      ['22201-107-000', 'Clutch Plate Friction Disc Set (5 Pcs)', 'CG125', 'Genuine Honda', 'Atlas Honda', 'Rack F - Shelf 1', 1100, 1550, 1320, 16, 4, '89640007002', 'B'],
-      ['13011-087-000', 'Piston Ring Set STD (Genuine)', 'CD70', 'Genuine Honda', 'Atlas Honda', 'Rack F - Shelf 2', 480, 720, 600, 12, 4, '89640008001', 'C'],
-      ['13011-397-000', 'Piston Ring Set STD (Genuine)', 'CG125', 'Genuine Honda', 'Atlas Honda', 'Rack F - Shelf 2', 650, 950, 800, 10, 3, '89640008002', 'C'],
-      ['35100-198-D10', 'Ignition Switch Key Set', 'CD70', 'Genuine Honda', 'Atlas Honda', 'Rack G - Shelf 1', 580, 850, 720, 14, 4, '89640009001', 'B'],
-    ];
+        const insertSlab = db.prepare(`
+          INSERT INTO product_pricing_slabs (
+            product_id, part_number, min_quantity, dealer_price, retail_price,
+            ex_factory_price, sales_tax
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
 
-    for (const part of sampleParts) {
-      insertProduct.run(...part);
+        const partToId = {};
+        for (const p of catalog.products) {
+          const res = insertProduct.run(
+            p.part_number,
+            p.name,
+            p.model_compat || 'Universal',
+            p.category || 'Genuine Honda Parts',
+            p.brand || 'Atlas Honda',
+            p.shelf_location || 'Rack G',
+            p.cost_price || 0,
+            p.retail_price || 0,
+            p.wholesale_price || 0,
+            p.stock_quantity || 20,
+            p.min_stock_alert || 5,
+            p.barcode || '',
+            p.abc_category || 'B'
+          );
+          partToId[p.part_number] = res.lastInsertRowid;
+        }
+
+        for (const s of (catalog.slabs || [])) {
+          const pid = partToId[s.part_number];
+          if (pid) {
+            insertSlab.run(
+              pid,
+              s.part_number,
+              s.min_quantity,
+              s.dealer_price,
+              s.retail_price,
+              s.ex_factory_price || 0,
+              s.sales_tax || 0
+            );
+          }
+        }
+        console.log(`Loaded ${catalog.products.length} genuine Atlas Honda parts and ${catalog.slabs?.length || 0} slabs into database.`);
+      } catch (err) {
+        console.error('Error seeding official catalog:', err.message);
+      }
     }
   }
 

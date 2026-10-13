@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Package, Search, Plus, Upload, Download, Tag, AlertTriangle,
-  Edit2, Check, X, ShieldAlert, Sparkles, SlidersHorizontal
+  Edit2, Check, X, ShieldAlert, Sparkles, SlidersHorizontal, Layers
 } from 'lucide-react';
 import BarcodeStickerModal from '../components/BarcodeStickerModal';
 
@@ -16,6 +16,7 @@ export default function InventoryManager() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [barcodeProduct, setBarcodeProduct] = useState(null);
+  const [selectedSlabProduct, setSelectedSlabProduct] = useState(null);
 
   // Inline editing state: { [id]: { retail_price, stock_quantity, shelf_location } }
   const [editingId, setEditingId] = useState(null);
@@ -367,7 +368,32 @@ export default function InventoryManager() {
                           onChange={(e) => setEditForm({ ...editForm, wholesale_price: e.target.value })}
                         />
                       ) : (
-                        <span style={{ color: 'var(--accent-blue)' }}>{p.wholesale_price}</span>
+                        <div>
+                          <span style={{ color: 'var(--accent-blue)', fontWeight: '700' }}>PKR {p.wholesale_price}</span>
+                          {p.slabs && p.slabs.length > 0 && (
+                            <div style={{ marginTop: '0.2rem' }}>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedSlabProduct(p)}
+                                className="card-badge badge-blue"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  fontSize: '0.68rem',
+                                  padding: '2px 6px',
+                                  cursor: 'pointer',
+                                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                                  background: 'rgba(59, 130, 246, 0.1)'
+                                }}
+                                title="Click to view wholesale volume tiers"
+                              >
+                                <Layers size={10} />
+                                {p.slabs.length} Slabs
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </td>
 
@@ -663,6 +689,141 @@ export default function InventoryManager() {
           product={barcodeProduct}
           onClose={() => setBarcodeProduct(null)}
         />
+      )}
+
+      {/* ================= WHOLESALE PRICING SLABS MODAL ================= */}
+      {selectedSlabProduct && (
+        <div className="modal-backdrop" onClick={() => setSelectedSlabProduct(null)}>
+          <div
+            className="modal-content"
+            style={{ maxWidth: '600px', width: '92%' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{
+                  background: 'rgba(59, 130, 246, 0.15)',
+                  color: 'var(--accent-blue)',
+                  padding: '8px',
+                  borderRadius: 'var(--radius-md)'
+                }}>
+                  <Layers size={22} />
+                </div>
+                <div>
+                  <h3 className="modal-title" style={{ fontSize: '1.1rem' }}>Atlas Honda Wholesale Slabs</h3>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
+                    Official Quantity Volume Scheme Pricing Structure
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => setSelectedSlabProduct(null)}
+                style={{ padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1.25rem' }}>
+              <div style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-md)',
+                padding: '0.85rem 1rem',
+                marginBottom: '1rem',
+                display: 'grid',
+                gridTemplateColumns: '1.4fr 1fr',
+                gap: '0.75rem'
+              }}>
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>PART CODE & NAME</div>
+                  <div style={{ fontWeight: '800', color: 'var(--text-primary)', fontSize: '0.95rem' }}>
+                    {selectedSlabProduct.part_number}
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                    {selectedSlabProduct.name}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>BASE RETAIL PRICE</div>
+                  <div style={{ fontWeight: '800', color: 'var(--accent-emerald)', fontSize: '1.1rem' }}>
+                    PKR {selectedSlabProduct.retail_price}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Model: {selectedSlabProduct.model_compat}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ overflowX: 'auto' }}>
+                <table className="pos-table" style={{ width: '100%', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left' }}>Min Qty Slab</th>
+                      <th style={{ textAlign: 'right' }}>Wholesale Price</th>
+                      <th style={{ textAlign: 'right' }}>Retail Price</th>
+                      <th style={{ textAlign: 'right' }}>Dealer Margin</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedSlabProduct.slabs && selectedSlabProduct.slabs.map((slab, idx) => {
+                      const discount = selectedSlabProduct.retail_price > 0
+                        ? (((selectedSlabProduct.retail_price - slab.dealer_price) / selectedSlabProduct.retail_price) * 100).toFixed(1)
+                        : 0;
+                      return (
+                        <tr key={idx} style={{ background: idx === 0 ? 'rgba(59, 130, 246, 0.03)' : 'transparent' }}>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <span className="card-badge badge-blue" style={{ fontWeight: '800' }}>
+                                {slab.min_quantity}+ pcs
+                              </span>
+                              {idx === 0 && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>(Base Tier)</span>}
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: '800', color: 'var(--accent-blue)' }}>
+                            PKR {slab.dealer_price}
+                          </td>
+                          <td style={{ textAlign: 'right', color: 'var(--text-muted)' }}>
+                            PKR {slab.retail_price || selectedSlabProduct.retail_price}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <span className="card-badge badge-emerald" style={{ fontSize: '0.72rem' }}>
+                              {discount}% OFF
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{
+                marginTop: '1rem',
+                padding: '0.75rem',
+                background: 'rgba(59, 130, 246, 0.05)',
+                border: '1px solid rgba(59, 130, 246, 0.2)',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.75rem',
+                color: 'var(--text-secondary)'
+              }}>
+                💡 <strong>Dynamic POS Activation:</strong> When selecting B2B Wholesale stream in POS and adding {selectedSlabProduct.name}, entering a quantity equal to or greater than the tier threshold automatically activates the corresponding wholesale price.
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setSelectedSlabProduct(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

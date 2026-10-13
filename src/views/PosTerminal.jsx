@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   Search, X, ShoppingBag, Plus, Percent, Tag, User,
   DollarSign, Bookmark, RotateCcw, Lock, ArrowRightLeft,
-  Trash2, Wrench, Store
+  Trash2, Wrench, Store, Printer, RefreshCw, Check
 } from 'lucide-react';
 import ThermalReceipt from '../components/ThermalReceipt';
 
-export default function PosTerminal({ onOpenShiftModal }) {
+export default function PosTerminal({ onOpenShiftModal, onOpenSidebar, headerSearch, onNavigateView }) {
   // Cart Items State: [{ product_id, part_number, name, quantity, unit_price, total_price, unit_cost }]
   const [cart, setCart] = useState([]);
   const [selectedItemIndex, setSelectedItemIndex] = useState(0);
@@ -63,15 +63,10 @@ export default function PosTerminal({ onOpenShiftModal }) {
 
   const fetchWorkshopJobs = async () => {
     try {
-      const res = await fetch('/api/workshop/jobs?status=ready');
+      const res = await fetch('/api/workshop/jobs');
       const data = await res.json();
-      if (data.length === 0) {
-        const inProg = await fetch('/api/workshop/jobs?status=in_progress');
-        const inProgData = await inProg.json();
-        setWorkshopJobs(inProgData);
-      } else {
-        setWorkshopJobs(data);
-      }
+      const openJobs = data.filter(j => j.status === 'ready' || j.status === 'in_progress');
+      setWorkshopJobs(openJobs);
     } catch (err) {
       console.error(err);
     }
@@ -82,15 +77,106 @@ export default function PosTerminal({ onOpenShiftModal }) {
       const res = await fetch('/api/khata/b2b-shops');
       const data = await res.json();
       setB2bShops(data);
+      if (data.length > 0 && !selectedShop) {
+        setSelectedShop(data[0]);
+      }
     } catch (err) {
       console.error(err);
     }
   };
 
-  // Keyboard Shortcuts (F3: Search, F4: Quantity, F8: New Sale, F2: Discount, F10: Payment, Delete)
+  // Select Full Workshop Job Card with fitted parts
+  const handleSelectWorkshopJob = async (job) => {
+    try {
+      const res = await fetch(`/api/workshop/jobs/${job.id}`);
+      const fullJob = await res.json();
+      setSelectedJob(fullJob);
+      setCart([]);
+    } catch (err) {
+      console.error(err);
+      setSelectedJob(job);
+      setCart([]);
+    }
+  };
+
+  // Dynamic Wholesale Volume Slab Pricing Resolver
+  const getProductUnitPrice = (product, qty = 1, stream = serviceType) => {
+    if (!product) return 0;
+    if (stream !== 'b2b_wholesale') {
+      return Number(product.retail_price) || 0;
+    }
+    // Check if product has volume wholesale slabs from June price list
+    if (product.slabs && product.slabs.length > 0) {
+      const matchingSlab = [...product.slabs]
+        .filter(s => qty >= s.min_quantity)
+        .sort((a, b) => b.min_quantity - a.min_quantity)[0];
+      if (matchingSlab && matchingSlab.dealer_price) {
+        return Number(matchingSlab.dealer_price);
+      }
+    }
+    return Number(product.wholesale_price) || Number(product.retail_price) || 0;
+  };
+
+  // Switch 3-in-1 POS Stream Mode
+  const handleSelectServiceType = (type) => {
+    setServiceType(type);
+    if (type === 'retail') {
+      setSelectedJob(null);
+      // Recalculate cart items with retail prices
+      setCart(prev => prev.map(item => {
+        const prod = allProducts.find(p => p.id === item.product_id) || item;
+        const price = prod.retail_price || item.unit_price;
+        return { ...item, unit_price: price, total_price: item.quantity * price };
+      }));
+    } else if (type === 'inhouse') {
+      setSelectedShop(null);
+      fetchWorkshopJobs();
+    } else if (type === 'b2b_wholesale') {
+      setSelectedJob(null);
+      if (!selectedShop && b2bShops.length > 0) {
+        setSelectedShop(b2bShops[0]);
+      }
+      setPaymentMethod('khata');
+      // Recalculate cart items with wholesale slab prices
+      setCart(prev => prev.map(item => {
+        const prod = allProducts.find(p => p.id === item.product_id) || item;
+        const price = getProductUnitPrice(prod, item.quantity, 'b2b_wholesale');
+        return { ...item, unit_price: price, total_price: item.quantity * price };
+      }));
+    }
+  };
+
+  // Sync with headerSearch from App.jsx if provided
+  useEffect(() => {
+    if (headerSearch !== undefined && headerSearch !== null) {
+      setSearchInput(headerSearch);
+      if (!headerSearch.trim()) {
+        setSearchResults([]);
+        return;
+      }
+      const q = headerSearch.toLowerCase();
+      const matches = allProducts.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        p.part_number.toLowerCase().includes(q) ||
+        (p.barcode && p.barcode.toLowerCase().includes(q))
+      );
+      setSearchResults(matches.slice(0, 8));
+    }
+  }, [headerSearch, allProducts]);
+
+  // Keyboard Shortcuts (F3: Search, F4: Quantity, F8: New Sale, F2: Discount, F10: Payment, Delete, Alt+1/2/3 Streams)
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'F3') {
+      if (e.altKey && e.key === '1') {
+        e.preventDefault();
+        handleSelectServiceType('retail');
+      } else if (e.altKey && e.key === '2') {
+        e.preventDefault();
+        handleSelectServiceType('inhouse');
+      } else if (e.altKey && e.key === '3') {
+        e.preventDefault();
+        handleSelectServiceType('b2b_wholesale');
+      } else if (e.key === 'F3') {
         e.preventDefault();
         setShowSearchModal(true);
       } else if (e.key === 'F4') {
@@ -118,7 +204,7 @@ export default function PosTerminal({ onOpenShiftModal }) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cart, selectedItemIndex, selectedJob]);
+  }, [cart, selectedItemIndex, selectedJob, allProducts, b2bShops]);
 
   // Handle Search Input in Top Bar
   const handleSearchChange = (e) => {
@@ -158,8 +244,6 @@ export default function PosTerminal({ onOpenShiftModal }) {
       return;
     }
 
-    const price = serviceType === 'b2b_wholesale' ? product.wholesale_price : product.retail_price;
-
     setCart(prev => {
       const existingIdx = prev.findIndex(item => item.product_id === product.id);
       if (existingIdx >= 0) {
@@ -169,24 +253,30 @@ export default function PosTerminal({ onOpenShiftModal }) {
           alert(`Maximum store stock reached (${product.stock_quantity})`);
           return prev;
         }
+        const nextQty = current.quantity + 1;
+        const unitPrice = getProductUnitPrice(product, nextQty, serviceType);
         updated[existingIdx] = {
           ...current,
-          quantity: current.quantity + 1,
-          total_price: (current.quantity + 1) * price
+          quantity: nextQty,
+          unit_price: unitPrice,
+          total_price: nextQty * unitPrice,
+          slabs: product.slabs || current.slabs || []
         };
         setSelectedItemIndex(existingIdx);
         return updated;
       }
 
+      const unitPrice = getProductUnitPrice(product, 1, serviceType);
       const newItem = {
         product_id: product.id,
         part_number: product.part_number,
         name: product.name,
         quantity: 1,
-        unit_price: price,
-        total_price: price,
+        unit_price: unitPrice,
+        total_price: unitPrice,
         unit_cost: product.cost_price,
-        stock_quantity: product.stock_quantity
+        stock_quantity: product.stock_quantity,
+        slabs: product.slabs || []
       };
       setSelectedItemIndex(prev.length);
       return [...prev, newItem];
@@ -223,10 +313,14 @@ export default function PosTerminal({ onOpenShiftModal }) {
           alert(`Only ${item.stock_quantity} available in stock!`);
           return prev;
         }
+        const prod = allProducts.find(p => p.id === item.product_id) || item;
+        const unitPrice = getProductUnitPrice(prod, qty, serviceType);
         updated[selectedItemIndex] = {
           ...item,
           quantity: qty,
-          total_price: qty * item.unit_price
+          unit_price: unitPrice,
+          total_price: qty * unitPrice,
+          slabs: prod.slabs || item.slabs || []
         };
       }
       return updated;
@@ -300,119 +394,388 @@ export default function PosTerminal({ onOpenShiftModal }) {
   };
 
   return (
-    <div className="aronium-pos-container">
-      
-      {/* ================= LEFT RECEIPT / ORDER TABLE ================= */}
-      <section className="aronium-receipt-area">
-        {/* Table Columns Header */}
-        <div className="aronium-table-header">
-          <div className="col-prod-name">Product name</div>
-          <div className="col-qty">Quantity</div>
-          <div className="col-price">Price</div>
-          <div className="col-amount">Amount</div>
-        </div>
+    <div className="pos-terminal-root">
+      <div className="aronium-pos-container">
+        
+        {/* ================= LEFT RECEIPT / ORDER TABLE ================= */}
+        <section className="aronium-receipt-area">
+          
+          {/* ================= 3-IN-1 STREAM SEGMENTED TABS ================= */}
+          <div className="pos-stream-tabs">
+            <button
+              type="button"
+              onClick={() => handleSelectServiceType('retail')}
+              className={`pos-stream-tab ${serviceType === 'retail' ? 'active-retail' : ''}`}
+              title="Counter Retail Parts (Alt+1)"
+            >
+              <ShoppingBag size={14} />
+              <span>Counter Retail</span>
+              <span className="tab-kbd">Alt+1</span>
+            </button>
 
-        {/* Table Items Body */}
-        <div className="aronium-table-body">
-          {serviceType === 'inhouse' && selectedJob ? (
-            /* In-House Workshop Active Job View */
-            <div style={{ padding: '16px' }}>
-              <div style={{ background: 'var(--aronium-surface)', border: '1px solid var(--aronium-border)', borderRadius: '6px', padding: '14px', marginBottom: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '18px', fontWeight: '800', color: 'var(--honda-red)' }}>
-                    {selectedJob.reg_number} ({selectedJob.vehicle_model})
+            <button
+              type="button"
+              onClick={() => handleSelectServiceType('inhouse')}
+              className={`pos-stream-tab ${serviceType === 'inhouse' ? 'active-workshop' : ''}`}
+              title="Workshop Delivery & Gate Pass (Alt+2)"
+            >
+              <Wrench size={14} />
+              <span>Workshop Delivery</span>
+              {workshopJobs.length > 0 && (
+                <span className="tab-ready-badge">{workshopJobs.length} Ready</span>
+              )}
+              <span className="tab-kbd">Alt+2</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSelectServiceType('b2b_wholesale')}
+              className={`pos-stream-tab ${serviceType === 'b2b_wholesale' ? 'active-b2b' : ''}`}
+              title="Wholesale Dealers B2B (Alt+3)"
+            >
+              <Store size={14} />
+              <span>Wholesale (B2B)</span>
+              <span className="tab-kbd">Alt+3</span>
+            </button>
+          </div>
+
+          {/* Stream Context Sub-Bar */}
+          <div className="pos-stream-context">
+            {serviceType === 'retail' && (
+              <>
+                <div className="context-left">
+                  <span className="context-label">Customer:</span>
+                  <span className="context-name">
+                    {selectedCustomer ? selectedCustomer.name : 'Walk-in Customer'}
                   </span>
-                  <span className="card-badge badge-purple">Job #{selectedJob.job_number}</span>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px' }}>
-                  Customer: <strong>{selectedJob.customer_name}</strong> ({selectedJob.customer_phone}) | Mechanic: <strong>{selectedJob.mechanic_name}</strong>
-                </div>
-              </div>
-
-              <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                Parts Fitted by Mechanic:
-              </div>
-              {selectedJob.parts && selectedJob.parts.map((p, idx) => (
-                <div key={idx} className="aronium-row">
-                  <div className="col-prod-name">
-                    <strong>{p.part_name}</strong>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{p.part_number}</div>
-                  </div>
-                  <div className="col-qty">{p.quantity}</div>
-                  <div className="col-price">{p.unit_price.toFixed(2)}</div>
-                  <div className="col-amount">{p.total_price.toFixed(2)}</div>
-                </div>
-              ))}
-
-              <div className="aronium-row" style={{ background: 'rgba(0, 120, 212, 0.1)', color: '#38bdf8', marginTop: '8px' }}>
-                <div className="col-prod-name">
-                  <strong>Work & Dynamic Labor Charges</strong>
-                  <div style={{ fontSize: '11px' }}>{selectedJob.work_type}</div>
-                </div>
-                <div className="col-qty">1</div>
-                <div className="col-price">{selectedJob.dynamic_labor_amount.toFixed(2)}</div>
-                <div className="col-amount">{selectedJob.dynamic_labor_amount.toFixed(2)}</div>
-              </div>
-            </div>
-          ) : cart.length === 0 ? (
-            /* Composed Tactile Empty State */
-            <div className="aronium-empty-state">
-              <div className="aronium-empty-icon">
-                <ShoppingBag size={28} />
-              </div>
-              <div className="aronium-empty-title">Register Ready for Next Customer</div>
-              <div className="aronium-empty-subtitle">
-                Scan barcode, search with <strong>F3</strong>, or click an essential Atlas Honda fast-mover below:
-              </div>
-
-              {/* Fast-Mover Quick-Add Pills */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', maxWidth: '440px', marginTop: '16px' }}>
-                {allProducts.slice(0, 4).map(p => (
+                  {selectedCustomer?.phone && (
+                    <span className="context-sub">({selectedCustomer.phone})</span>
+                  )}
                   <button
-                    key={p.id}
-                    onClick={() => addItemToCart(p)}
-                    className="btn btn-secondary btn-sm"
-                    style={{ fontSize: '11px', padding: '6px 12px', gap: '6px', background: 'var(--aronium-surface)', borderColor: 'var(--aronium-border-light)' }}
-                    title={`Add ${p.name} - PKR ${p.retail_price}`}
+                    type="button"
+                    onClick={() => setShowCustomerModal(true)}
+                    className="context-action-btn"
                   >
-                    <Plus size={12} color="var(--accent-emerald)" />
-                    <span>{p.name.length > 22 ? p.name.slice(0, 22) + '...' : p.name}</span>
-                    <span style={{ color: 'var(--accent-emerald)', fontWeight: '700', fontFamily: 'var(--font-mono)' }}>Rs {p.retail_price}</span>
+                    <User size={11} /> {selectedCustomer ? 'Change' : 'Assign'}
                   </button>
-                ))}
-              </div>
+                </div>
+                <div className="context-right">
+                  <span className="context-pill pill-retail-mrp">Retail MRP Active</span>
+                </div>
+              </>
+            )}
 
-              <div style={{ display: 'flex', gap: '14px', marginTop: '24px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F3</kbd> Search</span>
-                <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F12</kbd> Cash</span>
-                <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F10</kbd> Payment</span>
-                <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F8</kbd> New</span>
-              </div>
-            </div>
-          ) : (
-            /* Items List */
-            cart.map((item, idx) => {
-              const isSelected = idx === selectedItemIndex;
-              return (
-                <div
-                  key={idx}
-                  onClick={() => setSelectedItemIndex(idx)}
-                  className={`aronium-row ${isSelected ? 'selected' : ''}`}
-                >
-                  <div className="col-prod-name">
-                    <div style={{ fontWeight: '600' }}>{item.name}</div>
-                    <div style={{ fontSize: '11px', color: isSelected ? '#cbd5e1' : 'var(--text-muted)' }}>
-                      {item.part_number}
+            {serviceType === 'inhouse' && (
+              <>
+                <div className="context-left">
+                  {selectedJob ? (
+                    <span className="context-bike-active">
+                      🏍️ <strong>{selectedJob.reg_number}</strong> ({selectedJob.vehicle_model}) • Job #{selectedJob.job_number}
+                    </span>
+                  ) : (
+                    <span className="context-warning">
+                      ⚠️ Select a motorcycle below to load Job Card:
+                    </span>
+                  )}
+                </div>
+                <div className="context-right">
+                  {selectedJob && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedJob(null)}
+                      className="context-action-btn"
+                    >
+                      ⇄ Switch Bike
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={fetchWorkshopJobs}
+                    className="context-action-btn"
+                    title="Refresh open workshop jobs"
+                  >
+                    ↻ Refresh
+                  </button>
+                  <span className="context-pill pill-gate-pass">Gate Pass Delivery</span>
+                </div>
+              </>
+            )}
+
+            {serviceType === 'b2b_wholesale' && (
+              <>
+                <div className="context-left">
+                  <span className="context-label">Dealer:</span>
+                  <select
+                    className="context-dealer-select"
+                    value={selectedShop ? selectedShop.id : ''}
+                    onChange={(e) => {
+                      const shop = b2bShops.find(s => s.id === Number(e.target.value));
+                      setSelectedShop(shop || null);
+                    }}
+                  >
+                    {b2bShops.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.shop_name} ({s.owner_name})
+                      </option>
+                    ))}
+                  </select>
+                  {selectedShop && (
+                    <span className="context-khata">
+                      Khata: <strong>PKR {selectedShop.current_balance}</strong>
+                    </span>
+                  )}
+                </div>
+                <div className="context-right">
+                  <span className="context-pill pill-b2b-trade">Trade Rates Active</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Table Columns Header */}
+          <div className="aronium-table-header">
+            <div className="col-prod-name">Product name</div>
+            <div className="col-qty">Quantity</div>
+            <div className="col-price">Price</div>
+            <div className="col-amount">Amount</div>
+          </div>
+
+          {/* Table Items Body */}
+          <div className="aronium-table-body">
+            {serviceType === 'inhouse' ? (
+              selectedJob ? (
+                /* In-House Workshop Active Job View */
+                <div style={{ padding: '16px' }}>
+                  <div style={{ background: 'var(--aronium-surface)', border: '1px solid var(--aronium-border)', borderRadius: '6px', padding: '14px', marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '18px', fontWeight: '800', color: 'var(--honda-red)' }}>
+                        {selectedJob.reg_number} ({selectedJob.vehicle_model})
+                      </span>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <span className="card-badge badge-purple">Job #{selectedJob.job_number}</span>
+                        <span className="card-badge badge-blue">Gate Pass: {selectedJob.gate_pass_code}</span>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '4px' }}>
+                      Customer: <strong>{selectedJob.customer_name}</strong> ({selectedJob.customer_phone}) | Mechanic: <strong>{selectedJob.mechanic_name}</strong>
                     </div>
                   </div>
-                  <div className="col-qty" style={{ fontWeight: '700', fontFamily: 'var(--font-mono)' }}>{item.quantity}</div>
-                  <div className="col-price" style={{ fontFamily: 'var(--font-mono)' }}>{item.unit_price.toFixed(2)}</div>
-                  <div className="col-amount" style={{ fontWeight: '700', fontFamily: 'var(--font-mono)' }}>{item.total_price.toFixed(2)}</div>
+
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
+                    Parts Fitted by Mechanic ({selectedJob.parts ? selectedJob.parts.length : 0}):
+                  </div>
+                  {selectedJob.parts && selectedJob.parts.length > 0 ? (
+                    selectedJob.parts.map((p, idx) => (
+                      <div key={idx} className="aronium-row">
+                        <div className="col-prod-name">
+                          <strong>{p.part_name}</strong>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{p.part_number}</div>
+                        </div>
+                        <div className="col-qty">{p.quantity}</div>
+                        <div className="col-price">{Number(p.unit_price).toFixed(2)}</div>
+                        <div className="col-amount">{Number(p.total_price).toFixed(2)}</div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '8px 0' }}>
+                      No replacement parts billed for this job.
+                    </div>
+                  )}
+
+                  <div className="aronium-row" style={{ background: 'rgba(0, 120, 212, 0.1)', color: '#38bdf8', marginTop: '8px' }}>
+                    <div className="col-prod-name">
+                      <strong>Work & Dynamic Labor Charges</strong>
+                      <div style={{ fontSize: '11px' }}>{selectedJob.work_type}</div>
+                    </div>
+                    <div className="col-qty">1</div>
+                    <div className="col-price">{Number(selectedJob.dynamic_labor_amount || 0).toFixed(2)}</div>
+                    <div className="col-amount">{Number(selectedJob.dynamic_labor_amount || 0).toFixed(2)}</div>
+                  </div>
                 </div>
-              );
-            })
-          )}
-        </div>
+              ) : (
+                /* Interactive Workshop Jobs Picker when no bike is selected */
+                <div className="workshop-jobs-picker">
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '14px',
+                    paddingBottom: '8px',
+                    borderBottom: '1px solid var(--aronium-border)'
+                  }}>
+                    <div>
+                      <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Wrench size={17} color="var(--honda-red)" />
+                        Motorcycles in Workshop Ready for Delivery ({workshopJobs.length})
+                      </h4>
+                      <p style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        Select any repaired motorcycle to load fitted parts, dynamic labor, and print official Gate Pass.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={fetchWorkshopJobs}
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '11px' }}
+                    >
+                      ↻ Refresh
+                    </button>
+                  </div>
+
+                  {workshopJobs.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+                      <Wrench size={36} style={{ margin: '0 auto 12px', opacity: 0.5, color: '#f59e0b' }} />
+                      <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-main)' }}>
+                        No Active Workshop Bikes
+                      </div>
+                      <div style={{ fontSize: '12px', marginTop: '4px' }}>
+                        All workshop bikes have been checked out, or a new intake needs to be recorded.
+                      </div>
+                      {onNavigateView && (
+                        <button
+                          type="button"
+                          onClick={() => onNavigateView('workshop')}
+                          className="btn btn-primary btn-sm"
+                          style={{ marginTop: '16px', fontSize: '12px' }}
+                        >
+                          Go to Workshop Lift Bays &amp; Intake
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gap: '8px' }}>
+                      {workshopJobs.map(job => (
+                        <div
+                          key={job.id}
+                          onClick={() => handleSelectWorkshopJob(job)}
+                          className="workshop-job-card"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                            <div style={{
+                              background: 'rgba(225, 29, 72, 0.15)',
+                              border: '1px solid rgba(225, 29, 72, 0.3)',
+                              color: '#fb7185',
+                              padding: '8px 12px',
+                              borderRadius: '6px',
+                              fontWeight: '900',
+                              fontSize: '15px',
+                              fontFamily: 'var(--font-mono)'
+                            }}>
+                              {job.reg_number}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>
+                                {job.vehicle_model} <span className="card-badge badge-purple" style={{ fontSize: '10px', marginLeft: '6px' }}>Job #{job.job_number}</span>
+                              </div>
+                              <div style={{ fontSize: '11.5px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                                Customer: <strong>{job.customer_name}</strong> ({job.customer_phone}) • Mechanic: <strong>{job.mechanic_name}</strong>
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                Work: {job.work_type} • Fuel: {job.fuel_level}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                            <div style={{ fontSize: '15px', fontWeight: '900', color: 'var(--accent-emerald)', fontFamily: 'var(--font-mono)' }}>
+                              PKR {job.grand_total ? Number(job.grand_total).toFixed(2) : '0.00'}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectWorkshopJob(job);
+                              }}
+                              className="btn btn-primary btn-sm"
+                              style={{ fontSize: '11px', padding: '4px 10px', gap: '4px' }}
+                            >
+                              ✔ Load for Delivery
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            ) : cart.length === 0 ? (
+              /* Composed Tactile Empty State for Retail & Wholesale */
+              <div className="aronium-empty-state">
+                <div className="aronium-empty-icon">
+                  {serviceType === 'b2b_wholesale' ? <Store size={28} /> : <ShoppingBag size={28} />}
+                </div>
+                <div className="aronium-empty-title">
+                  {serviceType === 'b2b_wholesale'
+                    ? `Wholesale Order for ${selectedShop ? selectedShop.shop_name : 'Partner Dealer'}`
+                    : 'Register Ready for Next Customer'}
+                </div>
+                <div className="aronium-empty-subtitle">
+                  {serviceType === 'b2b_wholesale'
+                    ? 'Scan barcode or click fast-mover parts below to add on wholesale trade pricing:'
+                    : 'Scan barcode, search with F3, or click an essential Atlas Honda fast-mover below:'}
+                </div>
+
+                {/* Fast-Mover Quick-Add Pills */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', maxWidth: '460px', marginTop: '16px' }}>
+                  {allProducts.slice(0, 4).map(p => {
+                    const price = serviceType === 'b2b_wholesale' ? p.wholesale_price : p.retail_price;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => addItemToCart(p)}
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: '11px', padding: '6px 12px', gap: '6px', background: 'var(--aronium-surface)', borderColor: 'var(--aronium-border-light)' }}
+                        title={`Add ${p.name} - PKR ${price}`}
+                      >
+                        <Plus size={12} color="var(--accent-emerald)" />
+                        <span>{p.name.length > 22 ? p.name.slice(0, 22) + '...' : p.name}</span>
+                        <span style={{ color: 'var(--accent-emerald)', fontWeight: '700', fontFamily: 'var(--font-mono)' }}>Rs {price}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div style={{ display: 'flex', gap: '14px', marginTop: '24px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                  <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F3</kbd> Search</span>
+                  <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F12</kbd> Cash</span>
+                  <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F10</kbd> Payment</span>
+                  <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F8</kbd> New</span>
+                </div>
+              </div>
+            ) : (
+              /* Items List */
+              cart.map((item, idx) => {
+                const isSelected = idx === selectedItemIndex;
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => setSelectedItemIndex(idx)}
+                    className={`aronium-row ${isSelected ? 'selected' : ''}`}
+                  >
+                    <div className="col-prod-name">
+                      <div style={{ fontWeight: '600' }}>{item.name}</div>
+                      <div style={{ fontSize: '11px', color: isSelected ? '#cbd5e1' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>{item.part_number}</span>
+                        {serviceType === 'b2b_wholesale' && item.slabs && item.slabs.length > 1 && (
+                          (() => {
+                            const activeSlab = [...item.slabs].filter(s => item.quantity >= s.min_quantity).sort((a,b) => b.min_quantity - a.min_quantity)[0];
+                            return activeSlab && activeSlab.min_quantity > 1 ? (
+                              <span className="card-badge badge-emerald" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                                Slab {activeSlab.min_quantity}+ Applied
+                              </span>
+                            ) : null;
+                          })()
+                        )}
+                      </div>
+                    </div>
+                    <div className="col-qty" style={{ fontWeight: '700', fontFamily: 'var(--font-mono)' }}>{item.quantity}</div>
+                    <div className="col-price" style={{ fontFamily: 'var(--font-mono)' }}>{item.unit_price.toFixed(2)}</div>
+                    <div className="col-amount" style={{ fontWeight: '700', fontFamily: 'var(--font-mono)' }}>{item.total_price.toFixed(2)}</div>
+                  </div>
+                );
+              })
+            )}
+          </div>
 
         {/* Totals Summary Footer matching Aronium layout */}
         <div className="aronium-totals-footer">
@@ -457,14 +820,14 @@ export default function PosTerminal({ onOpenShiftModal }) {
         
         {/* Row 1: Top 4 Action Tiles [Delete, F3 Search, F4 Quantity, F8 New sale] */}
         <div className="aronium-grid-4">
-          <button onClick={handleDeleteItem} className="aronium-tile-btn">
-            <X size={26} color="#94a3b8" />
+          <button onClick={handleDeleteItem} className="aronium-tile-btn tile-delete" title="Delete selected item (Delete)">
+            <X size={20} color="#94a3b8" />
             <span>Delete</span>
           </button>
 
-          <button onClick={() => setShowSearchModal(true)} className="aronium-tile-btn">
+          <button onClick={() => setShowSearchModal(true)} className="aronium-tile-btn" title="Search products catalog (F3)">
             <span className="aronium-tile-badge">F3</span>
-            <Search size={24} color="#38bdf8" />
+            <Search size={20} color="#38bdf8" />
             <span>Search</span>
           </button>
 
@@ -476,165 +839,145 @@ export default function PosTerminal({ onOpenShiftModal }) {
               }
             }}
             className="aronium-tile-btn"
+            title="Change item quantity (F4)"
           >
             <span className="aronium-tile-badge">F4</span>
-            <ShoppingBag size={24} color="#f59e0b" />
+            <ShoppingBag size={20} color="#f59e0b" />
             <span>Quantity</span>
           </button>
 
-          <button onClick={handleNewSale} className="aronium-tile-btn">
+          <button onClick={handleNewSale} className="aronium-tile-btn" title="Start new clean sale (F8)">
             <span className="aronium-tile-badge">F8</span>
-            <Plus size={26} color="#34d399" />
+            <Plus size={20} color="#34d399" />
             <span>New sale</span>
           </button>
         </div>
 
-        {/* Row 2: Payment / Quick Tender Mode Tiles (Cash, JazzCash, Easypaisa, Bank, Card, Khata) */}
+        {/* Row 2: Payment / Tender Selection (Cash, Card, Bank Transfer, JazzCash, EasyPaisa, Khata) */}
         <div className="aronium-grid-3">
           <button
             onClick={() => setPaymentMethod('cash')}
             className={`aronium-tile-btn payment-tile ${paymentMethod === 'cash' ? 'selected' : ''}`}
+            title="Tender as Cash (F12)"
           >
             <span className="aronium-tile-badge">F12</span>
             <span>Cash</span>
           </button>
 
           <button
-            onClick={() => setPaymentMethod('jazzcash')}
-            className={`aronium-tile-btn payment-tile ${paymentMethod === 'jazzcash' ? 'selected' : ''}`}
-          >
-            <span>JAZZCASH</span>
-          </button>
-
-          <button
-            onClick={() => setPaymentMethod('easypaisa')}
-            className={`aronium-tile-btn payment-tile ${paymentMethod === 'easypaisa' ? 'selected' : ''}`}
-          >
-            <span>EASYPAISA</span>
-          </button>
-
-          <button
-            onClick={() => setPaymentMethod('bank_transfer')}
-            className={`aronium-tile-btn payment-tile ${paymentMethod === 'bank_transfer' ? 'selected' : ''}`}
-          >
-            <span>BANK TRANSFER</span>
-          </button>
-
-          <button
             onClick={() => setPaymentMethod('card')}
             className={`aronium-tile-btn payment-tile ${paymentMethod === 'card' ? 'selected' : ''}`}
+            title="Tender via POS Card Machine"
           >
             <span>Card</span>
           </button>
 
           <button
+            onClick={() => setPaymentMethod('bank_transfer')}
+            className={`aronium-tile-btn payment-tile ${paymentMethod === 'bank_transfer' ? 'selected' : ''}`}
+            title="Tender via Bank Online Transfer"
+          >
+            <span>Bank Transfer</span>
+          </button>
+
+          <button
+            onClick={() => setPaymentMethod('jazzcash')}
+            className={`aronium-tile-btn payment-tile ${paymentMethod === 'jazzcash' ? 'selected' : ''}`}
+            title="Tender via JazzCash QR / Wallet"
+          >
+            <span>JazzCash</span>
+          </button>
+
+          <button
+            onClick={() => setPaymentMethod('easypaisa')}
+            className={`aronium-tile-btn payment-tile ${paymentMethod === 'easypaisa' ? 'selected' : ''}`}
+            title="Tender via EasyPaisa"
+          >
+            <span>EasyPaisa</span>
+          </button>
+
+          <button
             onClick={() => setPaymentMethod('khata')}
             className={`aronium-tile-btn payment-tile ${paymentMethod === 'khata' ? 'selected' : ''}`}
+            title="Charge to Customer/Dealer Khata ledger"
           >
             <span>Khata (Credit)</span>
           </button>
         </div>
 
-        {/* Subtle Brand Watermark */}
-        <div className="aronium-watermark" style={{ letterSpacing: '0.2em' }}>
-          MADINA HONDA
-        </div>
-
-        {/* Row 3 & 4: Lower Function Buttons Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
-          
-          {/* Service Type Tile */}
-          <button onClick={() => setShowServiceTypeModal(true)} className="aronium-tile-btn">
-            <span style={{ fontSize: '18px', fontWeight: '900', color: 'var(--accent-blue)' }}>?</span>
-            <span style={{ fontSize: '11px', textTransform: 'capitalize' }}>
-              {serviceType === 'inhouse' ? 'Workshop Bike' : serviceType === 'b2b_wholesale' ? 'B2B Wholesale' : 'Service type'}
-            </span>
-          </button>
-
-          {/* F2 Discount */}
-          <button onClick={() => setShowDiscountModal(true)} className="aronium-tile-btn">
+        {/* Row 3: Standard POS Operations (Discount F2, Customer, Cash Drawer, Save Sale F9) */}
+        <div className="aronium-grid-4">
+          <button onClick={() => setShowDiscountModal(true)} className="aronium-tile-btn" title="Add Discount (F2)">
             <span className="aronium-tile-badge">F2</span>
-            <Percent size={20} color="#f59e0b" />
+            <Percent size={18} color="#f59e0b" />
             <span>Discount</span>
           </button>
 
-          {/* Price Override */}
-          <button onClick={() => alert('Price override mode')} className="aronium-tile-btn">
-            <Tag size={20} color="#94a3b8" />
-            <span>Price</span>
-          </button>
-
-          {/* Customer */}
-          <button onClick={() => setShowCustomerModal(true)} className="aronium-tile-btn">
-            <User size={20} color="#60a5fa" />
+          <button onClick={() => setShowCustomerModal(true)} className="aronium-tile-btn" title="Select Customer / Dealer">
+            <User size={18} color="#60a5fa" />
             <span>Customer</span>
           </button>
 
-          {/* Cash Drawer */}
           <button
-            onClick={() => alert('Cash Drawer kick signal sent to printer')}
+            onClick={() => alert('Cash Drawer kick signal sent to receipt printer')}
             className="aronium-tile-btn"
+            title="Open Cash Drawer"
           >
-            <DollarSign size={20} color="#34d399" />
+            <DollarSign size={18} color="#34d399" />
             <span>Cash drawer</span>
           </button>
 
-          {/* F9 Save Sale (Park/Hold) */}
           <button
             onClick={() => {
               if (cart.length > 0) alert('Sale parked & saved on hold!');
             }}
             className="aronium-tile-btn"
+            title="Park & Save Sale (F9)"
           >
             <span className="aronium-tile-badge">F9</span>
-            <Bookmark size={20} color="#c084fc" />
+            <Bookmark size={18} color="#c084fc" />
             <span>Save sale</span>
           </button>
+        </div>
 
-          {/* Refund */}
-          <button onClick={() => alert('Refund / Return mode active')} className="aronium-tile-btn">
-            <RotateCcw size={20} color="#f87171" />
+        {/* Row 4: Auxiliary Functions (Refund, Transfer, Lock, Price) */}
+        <div className="aronium-grid-4">
+          <button onClick={() => alert('Refund / Return mode active')} className="aronium-tile-btn" title="Process Refund">
+            <RotateCcw size={18} color="#f87171" />
             <span>Refund</span>
           </button>
 
-          {/* Transfer */}
-          <button onClick={() => alert('Order transfer')} className="aronium-tile-btn">
-            <ArrowRightLeft size={20} color="#94a3b8" />
+          <button onClick={() => alert('Order transfer to another counter')} className="aronium-tile-btn" title="Transfer Order">
+            <ArrowRightLeft size={18} color="#94a3b8" />
             <span>Transfer</span>
           </button>
 
-          {/* Lock Screen */}
-          <button onClick={onOpenShiftModal} className="aronium-tile-btn">
-            <Lock size={20} color="#fbbf24" />
+          <button onClick={onOpenShiftModal} className="aronium-tile-btn" title="Lock Register / Shift Status">
+            <Lock size={18} color="#fbbf24" />
             <span>Lock</span>
           </button>
 
-          {/* F10 Big Green Payment Button */}
-          <button onClick={handleOpenPayment} className="btn-aronium-payment">
-            <span style={{
-              fontSize: '10.5px',
-              fontWeight: '700',
-              letterSpacing: '0.08em',
-              background: 'rgba(0, 0, 0, 0.25)',
-              padding: '2px 8px',
-              borderRadius: '4px',
-              fontFamily: 'var(--font-mono)',
-              marginBottom: '4px'
-            }}>
-              F10 • TENDER
-            </span>
-            <span style={{ fontSize: '19px', fontWeight: '800', letterSpacing: '-0.01em' }}>Pay &amp; Print</span>
+          <button onClick={() => alert('Price override mode')} className="aronium-tile-btn" title="Override Item Price">
+            <Tag size={18} color="#94a3b8" />
+            <span>Price</span>
+          </button>
+        </div>
+
+        {/* Row 5: Bottom Command Row (F10 Pay & Print + Void Order) */}
+        <div className="aronium-bottom-actions">
+          <button onClick={handleOpenPayment} className="btn-aronium-payment" title="Tender, Checkout & Print (F10)">
+            <span className="tender-badge">F10 • TENDER</span>
+            <span className="tender-label">Pay &amp; Print</span>
           </button>
 
-          {/* Void Order (Red) */}
-          <button onClick={handleNewSale} className="btn-aronium-void">
-            <Trash2 size={19} />
+          <button onClick={handleNewSale} className="btn-aronium-void" title="Void current order">
+            <Trash2 size={18} />
             <span>Void order</span>
           </button>
-
         </div>
 
       </section>
+    </div>
 
       {/* ================= MODAL: F3 PRODUCT SEARCH ================= */}
       {showSearchModal && (
@@ -716,8 +1059,11 @@ export default function PosTerminal({ onOpenShiftModal }) {
               <button onClick={() => setShowQtyModal(false)} className="btn-outline" style={{ border: 'none' }}><X size={16} /></button>
             </div>
             <div className="modal-body" style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '8px' }}>
+              <div style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '3px' }}>
                 {cart[selectedItemIndex]?.name}
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                Part #{cart[selectedItemIndex]?.part_number}
               </div>
               <input
                 type="number"
@@ -729,6 +1075,22 @@ export default function PosTerminal({ onOpenShiftModal }) {
                 onChange={(e) => setNewQty(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleApplyQty()}
               />
+              {serviceType === 'b2b_wholesale' && cart[selectedItemIndex]?.slabs?.length > 1 && (
+                <div style={{ marginTop: '10px', padding: '8px', background: 'var(--aronium-bg)', borderRadius: '4px', fontSize: '11px', textAlign: 'left', border: '1px solid var(--aronium-border)' }}>
+                  <div style={{ fontWeight: '700', color: 'var(--accent-blue)', marginBottom: '4px' }}>
+                    Wholesale Volume Slabs:
+                  </div>
+                  {cart[selectedItemIndex].slabs.map((s, idx) => {
+                    const isMatched = parseInt(newQty) >= s.min_quantity;
+                    return (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: isMatched ? 'var(--accent-emerald)' : 'var(--text-muted)' }}>
+                        <span>Qty ≥ {s.min_quantity} pcs:</span>
+                        <strong style={{ fontFamily: 'var(--font-mono)' }}>PKR {s.dealer_price}</strong>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div className="modal-footer">
               <button onClick={() => setShowQtyModal(false)} className="btn btn-secondary">Cancel</button>
