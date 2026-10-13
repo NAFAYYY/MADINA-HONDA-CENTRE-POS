@@ -38,10 +38,21 @@ export default function AroniumSidebar({
         {/* Header */}
         <div className="sidebar-header">
           <div className="sidebar-brand">
-            <div className="sidebar-brand-badge">M</div>
+            <div className="sidebar-brand-badge" style={{
+              background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)',
+              fontWeight: '900',
+              fontSize: '13px',
+              letterSpacing: '0.05em'
+            }}>
+              MHC
+            </div>
             <div>
-              <div style={{ fontWeight: '800', fontSize: '14px', lineHeight: 1.2 }}>MADINA HONDA</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>POS & Workshop ERP</div>
+              <div style={{ fontWeight: '800', fontSize: '14px', lineHeight: 1.2, letterSpacing: '0.02em', color: 'var(--text-main)' }}>
+                MADINA HONDA
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                3S Dealership &amp; Workshop ERP
+              </div>
             </div>
           </div>
           <button onClick={onClose} className="btn-outline" style={{ border: 'none', padding: '6px' }}>

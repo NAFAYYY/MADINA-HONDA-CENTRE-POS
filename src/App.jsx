@@ -88,8 +88,26 @@ export default function App() {
           className="aronium-menu-btn"
           title="Open Menu / Workshop & Additional Options"
         >
-          <Menu size={22} />
+          <Menu size={20} />
         </button>
+
+        {/* Brand Crest */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingRight: '8px', borderRight: '1px solid var(--aronium-border)' }}>
+          <div style={{
+            background: 'var(--honda-red)',
+            color: '#fff',
+            fontWeight: '800',
+            fontSize: '12px',
+            padding: '2px 6px',
+            borderRadius: '3px',
+            letterSpacing: '0.05em'
+          }}>
+            HONDA
+          </div>
+          <span style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '0.04em', color: 'var(--text-main)' }}>
+            MADINA
+          </span>
+        </div>
 
         {/* Aronium Header Mode Icons (Barcode, Number, Tag) */}
         <div className="aronium-header-icon" title="Barcode Scanner Mode">
@@ -104,10 +122,10 @@ export default function App() {
 
         {/* Prominent Search Bar (Search products by name, code or barcode) */}
         <div className="aronium-search-box">
-          <Search size={15} style={{ position: 'absolute', left: '8px', color: 'var(--text-muted)' }} />
+          <Search size={15} style={{ position: 'absolute', left: '10px', color: 'var(--text-muted)' }} />
           <input
             type="text"
-            placeholder="Search products by name, code or barcode"
+            placeholder="Search products by name, code or barcode (or press F3)..."
             className="aronium-search-input"
             value={headerSearch}
             onChange={(e) => setHeaderSearch(e.target.value)}
@@ -115,6 +133,20 @@ export default function App() {
               if (activeView !== 'pos') setActiveView('pos');
             }}
           />
+          <span style={{
+            position: 'absolute',
+            right: '8px',
+            fontSize: '10px',
+            fontWeight: '700',
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)',
+            background: 'var(--aronium-bg)',
+            padding: '2px 5px',
+            borderRadius: '3px',
+            border: '1px solid var(--aronium-border)'
+          }}>
+            F3
+          </span>
         </div>
 
         {/* Right Header Area */}
@@ -134,16 +166,41 @@ export default function App() {
           {activeShift ? (
             <div
               onClick={() => setShowBlindCloseModal(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '11px', color: '#34d399', background: 'rgba(16, 124, 65, 0.15)', padding: '3px 8px', borderRadius: '4px' }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '7px',
+                cursor: 'pointer',
+                fontSize: '11.5px',
+                fontWeight: '600',
+                color: '#34d399',
+                background: 'rgba(16, 185, 129, 0.12)',
+                border: '1px solid rgba(16, 185, 129, 0.25)',
+                padding: '4px 10px',
+                borderRadius: '4px',
+                fontVariantNumeric: 'tabular-nums'
+              }}
               title="Click to perform blind shift closing"
             >
-              <span className="pulse-dot" style={{ width: '6px', height: '6px' }} />
+              <span className="pulse-dot" style={{ width: '7px', height: '7px' }} />
               <span>Shift Open (Rs {activeShift.opening_cash})</span>
             </div>
           ) : (
             <div
               onClick={() => setShowOpenShiftModal(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '11px', color: '#fbbf24', background: 'rgba(245, 158, 11, 0.15)', padding: '3px 8px', borderRadius: '4px' }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                cursor: 'pointer',
+                fontSize: '11.5px',
+                fontWeight: '600',
+                color: '#fbbf24',
+                background: 'rgba(245, 158, 11, 0.12)',
+                border: '1px solid rgba(245, 158, 11, 0.25)',
+                padding: '4px 10px',
+                borderRadius: '4px'
+              }}
               title="Click to open shift"
             >
               <Lock size={12} />
@@ -152,12 +209,22 @@ export default function App() {
           )}
 
           {/* Show Current Role */}
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '600' }}>
+          <span style={{
+            fontSize: '11px',
+            fontWeight: '700',
+            color: 'var(--text-dim)',
+            background: 'var(--aronium-tile-bg)',
+            border: '1px solid var(--aronium-border)',
+            padding: '3px 8px',
+            borderRadius: '4px',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase'
+          }}>
             {currentRole === 'admin' ? 'Admin' : currentRole === 'cashier' ? 'Cashier' : 'Supervisor'}
           </span>
 
           {/* Window Mock Controls */}
-          <div style={{ display: 'flex', gap: '8px', color: 'var(--text-muted)', marginLeft: '6px' }}>
+          <div style={{ display: 'flex', gap: '8px', color: 'var(--text-muted)', marginLeft: '4px' }}>
             <Minus size={14} style={{ cursor: 'pointer' }} />
             <Square size={12} style={{ cursor: 'pointer' }} />
             <X size={14} style={{ cursor: 'pointer' }} />

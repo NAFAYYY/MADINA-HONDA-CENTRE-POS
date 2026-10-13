@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search, X, ShoppingBag, Plus, Percent, Tag, User,
   DollarSign, Bookmark, RotateCcw, Lock, ArrowRightLeft,
-  Trash2, Check, Printer, ShieldCheck, Wrench, Store, AlertCircle
+  Trash2, Wrench, Store
 } from 'lucide-react';
 import ThermalReceipt from '../components/ThermalReceipt';
 
-export default function PosTerminal({ activeShift, onOpenShiftModal, onOpenSidebar }) {
+export default function PosTerminal({ onOpenShiftModal }) {
   // Cart Items State: [{ product_id, part_number, name, quantity, unit_price, total_price, unit_cost }]
   const [cart, setCart] = useState([]);
   const [selectedItemIndex, setSelectedItemIndex] = useState(0);
@@ -24,7 +24,6 @@ export default function PosTerminal({ activeShift, onOpenShiftModal, onOpenSideb
   const [searchInput, setSearchInput] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [allProducts, setAllProducts] = useState([]);
-  const searchInputRef = useRef(null);
 
   // Modals
   const [showSearchModal, setShowSearchModal] = useState(false);
@@ -356,11 +355,38 @@ export default function PosTerminal({ activeShift, onOpenShiftModal, onOpenSideb
               </div>
             </div>
           ) : cart.length === 0 ? (
-            /* Empty State matching Aronium Lite screenshot */
+            /* Composed Tactile Empty State */
             <div className="aronium-empty-state">
-              <div className="aronium-empty-title">No items</div>
+              <div className="aronium-empty-icon">
+                <ShoppingBag size={28} />
+              </div>
+              <div className="aronium-empty-title">Register Ready for Next Customer</div>
               <div className="aronium-empty-subtitle">
-                Add products to receipt using barcode, code or search by pressing F3 button
+                Scan barcode, search with <strong>F3</strong>, or click an essential Atlas Honda fast-mover below:
+              </div>
+
+              {/* Fast-Mover Quick-Add Pills */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', maxWidth: '440px', marginTop: '16px' }}>
+                {allProducts.slice(0, 4).map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => addItemToCart(p)}
+                    className="btn btn-secondary btn-sm"
+                    style={{ fontSize: '11px', padding: '6px 12px', gap: '6px', background: 'var(--aronium-surface)', borderColor: 'var(--aronium-border-light)' }}
+                    title={`Add ${p.name} - PKR ${p.retail_price}`}
+                  >
+                    <Plus size={12} color="var(--accent-emerald)" />
+                    <span>{p.name.length > 22 ? p.name.slice(0, 22) + '...' : p.name}</span>
+                    <span style={{ color: 'var(--accent-emerald)', fontWeight: '700', fontFamily: 'var(--font-mono)' }}>Rs {p.retail_price}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: '14px', marginTop: '24px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F3</kbd> Search</span>
+                <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F12</kbd> Cash</span>
+                <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F10</kbd> Payment</span>
+                <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F8</kbd> New</span>
               </div>
             </div>
           ) : (
@@ -379,9 +405,9 @@ export default function PosTerminal({ activeShift, onOpenShiftModal, onOpenSideb
                       {item.part_number}
                     </div>
                   </div>
-                  <div className="col-qty" style={{ fontWeight: '700' }}>{item.quantity}</div>
-                  <div className="col-price">{item.unit_price.toFixed(2)}</div>
-                  <div className="col-amount" style={{ fontWeight: '700' }}>{item.total_price.toFixed(2)}</div>
+                  <div className="col-qty" style={{ fontWeight: '700', fontFamily: 'var(--font-mono)' }}>{item.quantity}</div>
+                  <div className="col-price" style={{ fontFamily: 'var(--font-mono)' }}>{item.unit_price.toFixed(2)}</div>
+                  <div className="col-amount" style={{ fontWeight: '700', fontFamily: 'var(--font-mono)' }}>{item.total_price.toFixed(2)}</div>
                 </div>
               );
             })
@@ -390,19 +416,38 @@ export default function PosTerminal({ activeShift, onOpenShiftModal, onOpenSideb
 
         {/* Totals Summary Footer matching Aronium layout */}
         <div className="aronium-totals-footer">
-          <div className="aronium-total-line">
-            <span>Subtotal</span>
-            <span style={{ fontWeight: '600' }}>{subtotal.toFixed(2)}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <span className="card-badge badge-blue">
+                {cart.reduce((acc, i) => acc + i.quantity, 0)} Items
+              </span>
+              <span className="card-badge badge-emerald" style={{ textTransform: 'uppercase' }}>
+                {paymentMethod}
+              </span>
+              {serviceType !== 'retail' && (
+                <span className="card-badge badge-purple" style={{ textTransform: 'capitalize' }}>
+                  {serviceType.replace('_', ' ')}
+                </span>
+              )}
+            </div>
+            <div className="aronium-total-line">
+              <span>Subtotal</span>
+              <span style={{ fontWeight: '600', fontFamily: 'var(--font-mono)' }}>PKR {subtotal.toFixed(2)}</span>
+            </div>
           </div>
+
           {discountAmount > 0 && (
             <div className="aronium-total-line" style={{ color: '#f87171' }}>
               <span>Discount</span>
-              <span>-{discountAmount.toFixed(2)}</span>
+              <span style={{ fontFamily: 'var(--font-mono)' }}>-PKR {discountAmount.toFixed(2)}</span>
             </div>
           )}
+
           <div className="aronium-total-line grand-total">
-            <span>Total</span>
-            <span>{grandTotal.toFixed(2)}</span>
+            <span>Total Payable</span>
+            <span className="grand-total-amount" style={{ fontFamily: 'var(--font-mono)' }}>
+              PKR {grandTotal.toFixed(2)}
+            </span>
           </div>
         </div>
       </section>
@@ -491,8 +536,8 @@ export default function PosTerminal({ activeShift, onOpenShiftModal, onOpenSideb
         </div>
 
         {/* Subtle Brand Watermark */}
-        <div className="aronium-watermark">
-          aronium
+        <div className="aronium-watermark" style={{ letterSpacing: '0.2em' }}>
+          MADINA HONDA
         </div>
 
         {/* Row 3 & 4: Lower Function Buttons Grid */}
@@ -566,13 +611,24 @@ export default function PosTerminal({ activeShift, onOpenShiftModal, onOpenSideb
 
           {/* F10 Big Green Payment Button */}
           <button onClick={handleOpenPayment} className="btn-aronium-payment">
-            <span style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px' }}>F10</span>
-            <span>Payment</span>
+            <span style={{
+              fontSize: '10.5px',
+              fontWeight: '700',
+              letterSpacing: '0.08em',
+              background: 'rgba(0, 0, 0, 0.25)',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              fontFamily: 'var(--font-mono)',
+              marginBottom: '4px'
+            }}>
+              F10 • TENDER
+            </span>
+            <span style={{ fontSize: '19px', fontWeight: '800', letterSpacing: '-0.01em' }}>Pay &amp; Print</span>
           </button>
 
           {/* Void Order (Red) */}
           <button onClick={handleNewSale} className="btn-aronium-void">
-            <Trash2 size={20} />
+            <Trash2 size={19} />
             <span>Void order</span>
           </button>
 
