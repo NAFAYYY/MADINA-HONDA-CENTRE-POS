@@ -47,6 +47,120 @@ app.get('/api/auth/users', (req, res) => {
 });
 
 // ==========================================
+// 1.5. SYSTEM SETTINGS & PRINT SCRIPT TEMPLATES
+// ==========================================
+app.get('/api/settings', (req, res) => {
+  try {
+    const rows = db.prepare('SELECT key, value, category, description FROM system_settings').all();
+    const settings = {};
+    for (const r of rows) {
+      settings[r.key] = r.value;
+    }
+    res.json({ settings, raw: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/settings', (req, res) => {
+  try {
+    const { settings } = req.body;
+    if (!settings || typeof settings !== 'object') {
+      return res.status(400).json({ error: 'Settings object is required' });
+    }
+    const upsert = db.prepare(`
+      INSERT INTO system_settings (key, value, updated_at)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+    `);
+    for (const [k, v] of Object.entries(settings)) {
+      upsert.run(k, String(v));
+    }
+    res.json({ success: true, message: 'Settings saved successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/print-templates', (req, res) => {
+  try {
+    const templates = db.prepare('SELECT * FROM print_templates ORDER BY is_active DESC, name ASC').all();
+    const active = templates.find(t => t.is_active === 1) || templates[0];
+    res.json({ templates, active });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/print-templates/active', (req, res) => {
+  try {
+    const active = db.prepare('SELECT * FROM print_templates WHERE is_active = 1 LIMIT 1').get()
+      || db.prepare('SELECT * FROM print_templates LIMIT 1').get();
+    res.json(active);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/print-templates', (req, res) => {
+  try {
+    const { id, name, paper_size, receipt_width_mm, html_template, custom_css, is_active } = req.body;
+    const templateId = id || `tpl_${Date.now()}`;
+    const upsert = db.prepare(`
+      INSERT INTO print_templates (id, name, paper_size, receipt_width_mm, html_template, custom_css, is_active, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        paper_size = excluded.paper_size,
+        receipt_width_mm = excluded.receipt_width_mm,
+        html_template = excluded.html_template,
+        custom_css = excluded.custom_css,
+        is_active = excluded.is_active,
+        updated_at = CURRENT_TIMESTAMP
+    `);
+    
+    if (is_active) {
+      db.prepare('UPDATE print_templates SET is_active = 0').run();
+    }
+    
+    upsert.run(
+      templateId,
+      name || 'Custom Thermal Slip',
+      paper_size || '80mm',
+      Number(receipt_width_mm) || 74,
+      html_template || '',
+      custom_css || '',
+      is_active ? 1 : 0
+    );
+    res.json({ success: true, id: templateId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/print-templates/:id/activate', (req, res) => {
+  try {
+    const { id } = req.params;
+    db.prepare('UPDATE print_templates SET is_active = 0').run();
+    db.prepare('UPDATE print_templates SET is_active = 1 WHERE id = ?').run(id);
+    res.json({ success: true, activeId: id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/print-templates/reset', (req, res) => {
+  try {
+    db.prepare('DELETE FROM print_templates').run();
+    db.prepare('DELETE FROM system_settings').run();
+    initDatabase();
+    res.json({ success: true, message: 'Factory default print templates and settings restored' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
 // 2. SPARE PARTS & INVENTORY
 // ==========================================
 app.get('/api/products', (req, res) => {

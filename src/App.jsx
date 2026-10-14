@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   Menu, Barcode, Hash, Tag, Search, ArrowLeft,
-  Lock, Sun, Moon, Minus, Square, X, ShieldAlert
+  Lock, Sun, Moon, Minus, Square, X, ShieldAlert,
+  Settings, Printer
 } from 'lucide-react';
 
 import PosTerminal from './views/PosTerminal';
@@ -11,13 +12,15 @@ import MechanicLedger from './views/MechanicLedger';
 import ComplaintsManager from './views/ComplaintsManager';
 import KhataManager from './views/KhataManager';
 import AdminAnalytics from './views/AdminAnalytics';
+import SettingsManager from './views/SettingsManager';
+import PrintScriptEditor from './views/PrintScriptEditor';
 
 import AroniumSidebar from './components/AroniumSidebar';
 import BlindCloseModal from './components/BlindCloseModal';
 import ExpenseModal from './components/ExpenseModal';
 
 export default function App() {
-  const [activeView, setActiveView] = useState('pos'); // 'pos', 'workshop', 'inventory', 'mechanics', 'complaints', 'khata', 'analytics'
+  const [activeView, setActiveView] = useState('pos'); // 'pos', 'workshop', 'inventory', 'mechanics', 'complaints', 'khata', 'analytics', 'settings', 'print-editor'
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentRole, setCurrentRole] = useState('admin'); // 'admin', 'cashier', 'supervisor'
   const [theme, setTheme] = useState('dark');
@@ -162,6 +165,17 @@ export default function App() {
             </button>
           )}
 
+          {/* Quick Settings Button */}
+          <button
+            onClick={() => setActiveView('settings')}
+            className="btn btn-outline btn-sm"
+            style={{ fontSize: '11px', padding: '4px 8px', gap: '4px', borderColor: 'var(--aronium-border)' }}
+            title="System Settings & Hardware Config"
+          >
+            <Settings size={13} />
+            <span>Settings</span>
+          </button>
+
           {/* Active Shift Indicator */}
           {activeShift ? (
             <div
@@ -240,6 +254,7 @@ export default function App() {
           onOpenSidebar={() => setIsSidebarOpen(true)}
           headerSearch={headerSearch}
           onNavigateView={setActiveView}
+          onOpenPrintEditor={() => setActiveView('print-editor')}
         />
       )}
 
@@ -261,6 +276,8 @@ export default function App() {
           {activeView === 'complaints' && <ComplaintsManager />}
           {activeView === 'khata' && <KhataManager />}
           {activeView === 'analytics' && <AdminAnalytics />}
+          {activeView === 'settings' && <SettingsManager onOpenPrintEditor={() => setActiveView('print-editor')} />}
+          {activeView === 'print-editor' && <PrintScriptEditor onNavigateBack={() => setActiveView('settings')} />}
         </div>
       )}
 

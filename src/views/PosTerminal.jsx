@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import ThermalReceipt from '../components/ThermalReceipt';
 
-export default function PosTerminal({ onOpenShiftModal, onOpenSidebar, headerSearch, onNavigateView }) {
+export default function PosTerminal({ onOpenShiftModal, onOpenSidebar, headerSearch, onNavigateView, onOpenPrintEditor }) {
   // Cart Items State: [{ product_id, part_number, name, quantity, unit_price, total_price, unit_cost }]
   const [cart, setCart] = useState([]);
   const [selectedItemIndex, setSelectedItemIndex] = useState(0);
@@ -1348,6 +1348,7 @@ export default function PosTerminal({ onOpenShiftModal, onOpenSidebar, headerSea
         <ThermalReceipt
           invoiceData={completedInvoice}
           onClose={() => setCompletedInvoice(null)}
+          onOpenPrintEditor={onOpenPrintEditor}
         />
       )}
 

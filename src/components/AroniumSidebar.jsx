@@ -1,7 +1,8 @@
 import React from 'react';
 import {
   ShoppingCart, Wrench, Package, Users, AlertCircle, CreditCard,
-  TrendingUp, Lock, DollarSign, X, Sun, Moon, Shield, Store
+  TrendingUp, Lock, DollarSign, X, Sun, Moon, Shield, Store,
+  Settings, Printer
 } from 'lucide-react';
 
 export default function AroniumSidebar({
@@ -28,6 +29,8 @@ export default function AroniumSidebar({
     { id: 'complaints', label: 'Re-Work & Complaints', icon: AlertCircle, roles: ['admin', 'supervisor', 'cashier'] },
     { id: 'khata', label: 'Khata Credit Management', icon: CreditCard, roles: ['admin', 'cashier'] },
     { id: 'analytics', label: 'Owner Analytics (Admin)', icon: TrendingUp, roles: ['admin'] },
+    { id: 'print-editor', label: 'Print Script Editor', icon: Printer, roles: ['admin', 'supervisor', 'cashier'] },
+    { id: 'settings', label: 'System Settings & Config', icon: Settings, roles: ['admin', 'supervisor', 'cashier'] },
   ];
 
   const allowedItems = menuItems.filter(item => item.roles.includes(currentRole));

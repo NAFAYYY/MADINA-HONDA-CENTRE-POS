@@ -15,9 +15,9 @@ export default function BarcodeStickerModal({ product, onClose }) {
   const barcodeValue = product.barcode || product.part_number.replace(/[^a-zA-Z0-9]/g, '');
 
   return (
-    <div className="modal-backdrop">
+    <div className="modal-backdrop printing-active">
       <div className="modal-content" style={{ maxWidth: '520px' }}>
-        <div className="modal-header">
+        <div className="modal-header no-print">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Tag size={18} color="var(--honda-red)" />
             <h3 style={{ fontSize: '1.05rem', fontWeight: '700' }}>Barcode Sticker Generator</h3>
@@ -28,8 +28,8 @@ export default function BarcodeStickerModal({ product, onClose }) {
         </div>
 
         <div className="modal-body">
-          {/* Controls */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+          {/* Controls - Hidden in Print */}
+          <div className="no-print" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label className="form-label">Sticker Size (mm)</label>
               <select
@@ -104,7 +104,7 @@ export default function BarcodeStickerModal({ product, onClose }) {
           </div>
         </div>
 
-        <div className="modal-footer">
+        <div className="modal-footer no-print">
           <button onClick={onClose} className="btn btn-secondary">
             Cancel
           </button>
