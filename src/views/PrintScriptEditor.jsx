@@ -4,11 +4,14 @@ import {
   ChevronUp, ChevronDown, GripVertical, Sparkles, Sliders,
   Building2, FileText, User, ShoppingBag, Wrench, Calculator,
   ShieldCheck, MessageSquare, ZoomIn, ZoomOut, Zap,
-  CheckCircle2, Layers, AlertCircle, Info
+  CheckCircle2, Layers, AlertCircle, Info, Type, Bold
 } from 'lucide-react';
 import {
   DEFAULT_RECEIPT_CONFIG,
   RECEIPT_PRESETS,
+  FONT_FAMILIES,
+  FONT_SIZES,
+  FONT_WEIGHTS,
   fetchReceiptConfig,
   saveReceiptConfig,
   generateReceiptHtml
@@ -297,13 +300,13 @@ export default function PrintScriptEditor({ onNavigateBack }) {
                 Visual Receipt Designer &amp; Thermal Script Builder
               </h2>
               <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>
-                100% Visual Drag &amp; Drop — Reorder sections, eliminate paper waste, zero code required.
+                100% Visual Drag &amp; Drop — Reorder sections, customize font size, weight &amp; family, eliminate paper waste.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Top Buttons */}
+        {/* Top Action Buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button onClick={handleReset} className="btn btn-outline btn-sm" title="Restore standard defaults">
             <RotateCcw size={14} /> Reset
@@ -357,96 +360,174 @@ export default function PrintScriptEditor({ onNavigateBack }) {
         {/* LEFT COLUMN: Visual Drag & Drop Block Builder */}
         <div className="print-editor-pane" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
-          {/* Paper Roll & Typography Global Options */}
+          {/* GLOBAL TYPOGRAPHY & ROLL FORMATTING CARD */}
           <div style={{
             background: 'rgba(255, 255, 255, 0.03)',
             border: '1px solid var(--aronium-border)',
-            borderRadius: '6px',
-            padding: '10px 12px',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+            borderRadius: '8px',
+            padding: '12px 14px',
+            display: 'flex',
+            flexDirection: 'column',
             gap: '10px'
           }}>
-            <div>
-              <label className="form-label" style={{ fontSize: '10.5px' }}>Paper Roll Size</label>
-              <select
-                className="form-select"
-                style={{ fontSize: '11px', padding: '4px 6px' }}
-                value={config.paper_size}
-                onChange={(e) => {
-                  const size = e.target.value;
-                  setConfig(prev => ({
-                    ...prev,
-                    paper_size: size,
-                    width_mm: size === '58mm' ? 48 : 72
-                  }));
-                  setSelectedPreset('custom');
-                }}
-              >
-                <option value="80mm">80mm Roll (Standard POS)</option>
-                <option value="58mm">58mm Roll (Mini POS)</option>
-              </select>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px' }}>
+              <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Type size={14} color="var(--honda-red)" /> Global Typography &amp; Roll Sizing
+              </span>
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                Applies across all receipt blocks
+              </span>
             </div>
 
-            <div>
-              <label className="form-label" style={{ fontSize: '10.5px' }}>Printable Width (mm)</label>
-              <input
-                type="number"
-                min="40"
-                max="80"
-                className="form-input"
-                style={{ fontSize: '11px', padding: '4px 6px' }}
-                value={config.width_mm}
-                onChange={(e) => {
-                  setConfig(prev => ({ ...prev, width_mm: Number(e.target.value) || 72 }));
-                  setSelectedPreset('custom');
-                }}
-              />
+            {/* Row 1: Font Family & Base Font Size */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: '10px' }}>
+              <div>
+                <label className="form-label" style={{ fontSize: '10.5px' }}>
+                  Font Family
+                </label>
+                <select
+                  className="form-select"
+                  style={{ fontSize: '11px', padding: '5px 8px' }}
+                  value={config.font_family || 'monospace'}
+                  onChange={(e) => {
+                    setConfig(prev => ({ ...prev, font_family: e.target.value }));
+                    setSelectedPreset('custom');
+                  }}
+                >
+                  {FONT_FAMILIES.map(f => (
+                    <option key={f.id} value={f.id}>
+                      {f.name} — {f.note}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="form-label" style={{ fontSize: '10.5px' }}>
+                  Base Text Size
+                </label>
+                <select
+                  className="form-select"
+                  style={{ fontSize: '11px', padding: '5px 8px' }}
+                  value={config.font_size || '10.5px'}
+                  onChange={(e) => {
+                    setConfig(prev => ({ ...prev, font_size: e.target.value }));
+                    setSelectedPreset('custom');
+                  }}
+                >
+                  {FONT_SIZES.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="form-label" style={{ fontSize: '10.5px' }}>
+                  Base Text Weight
+                </label>
+                <select
+                  className="form-select"
+                  style={{ fontSize: '11px', padding: '5px 8px' }}
+                  value={config.font_weight || '500'}
+                  onChange={(e) => {
+                    setConfig(prev => ({ ...prev, font_weight: e.target.value }));
+                    setSelectedPreset('custom');
+                  }}
+                >
+                  {FONT_WEIGHTS.map(w => (
+                    <option key={w.id} value={w.id}>
+                      {w.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            <div>
-              <label className="form-label" style={{ fontSize: '10.5px' }}>Font Size</label>
-              <select
-                className="form-select"
-                style={{ fontSize: '11px', padding: '4px 6px' }}
-                value={config.font_size}
-                onChange={(e) => {
-                  setConfig(prev => ({ ...prev, font_size: e.target.value }));
-                  setSelectedPreset('custom');
-                }}
-              >
-                <option value="9px">9px (Ultra Compact)</option>
-                <option value="9.5px">9.5px (Compact)</option>
-                <option value="10.5px">10.5px (Standard)</option>
-                <option value="11.5px">11.5px (Large)</option>
-              </select>
-            </div>
+            {/* Row 2: Roll Size, Printable Width, Density, Divider */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px', paddingTop: '2px' }}>
+              <div>
+                <label className="form-label" style={{ fontSize: '10.5px' }}>Paper Roll Size</label>
+                <select
+                  className="form-select"
+                  style={{ fontSize: '11px', padding: '4px 6px' }}
+                  value={config.paper_size}
+                  onChange={(e) => {
+                    const size = e.target.value;
+                    setConfig(prev => ({
+                      ...prev,
+                      paper_size: size,
+                      width_mm: size === '58mm' ? 48 : 72
+                    }));
+                    setSelectedPreset('custom');
+                  }}
+                >
+                  <option value="80mm">80mm Roll (Standard)</option>
+                  <option value="58mm">58mm Roll (Mini POS)</option>
+                </select>
+              </div>
 
-            <div>
-              <label className="form-label" style={{ fontSize: '10.5px' }}>Divider Style</label>
-              <select
-                className="form-select"
-                style={{ fontSize: '11px', padding: '4px 6px' }}
-                value={config.divider_style}
-                onChange={(e) => {
-                  setConfig(prev => ({ ...prev, divider_style: e.target.value }));
-                  setSelectedPreset('custom');
-                }}
-              >
-                <option value="dashed">Dashed (- - -)</option>
-                <option value="dotted">Dotted (. . .)</option>
-                <option value="solid">Solid (——)</option>
-                <option value="none">None (Zero Lines)</option>
-              </select>
+              <div>
+                <label className="form-label" style={{ fontSize: '10.5px' }}>Print Width (mm)</label>
+                <input
+                  type="number"
+                  min="40"
+                  max="80"
+                  className="form-input"
+                  style={{ fontSize: '11px', padding: '4px 6px' }}
+                  value={config.width_mm}
+                  onChange={(e) => {
+                    setConfig(prev => ({ ...prev, width_mm: Number(e.target.value) || 72 }));
+                    setSelectedPreset('custom');
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="form-label" style={{ fontSize: '10.5px' }}>Line Spacing</label>
+                <select
+                  className="form-select"
+                  style={{ fontSize: '11px', padding: '4px 6px' }}
+                  value={config.line_spacing || '1.2'}
+                  onChange={(e) => {
+                    setConfig(prev => ({ ...prev, line_spacing: e.target.value }));
+                    setSelectedPreset('custom');
+                  }}
+                >
+                  <option value="1.1">1.1 (Ultra Compact)</option>
+                  <option value="1.2">1.2 (Standard)</option>
+                  <option value="1.3">1.3 (Spacious)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="form-label" style={{ fontSize: '10.5px' }}>Divider Style</label>
+                <select
+                  className="form-select"
+                  style={{ fontSize: '11px', padding: '4px 6px' }}
+                  value={config.divider_style || 'dashed'}
+                  onChange={(e) => {
+                    setConfig(prev => ({ ...prev, divider_style: e.target.value }));
+                    setSelectedPreset('custom');
+                  }}
+                >
+                  <option value="dashed">Dashed (- - -)</option>
+                  <option value="dotted">Dotted (. . .)</option>
+                  <option value="solid">Solid (——)</option>
+                  <option value="none">None (Zero Lines)</option>
+                </select>
+              </div>
             </div>
           </div>
 
+          {/* SECTION HEADER */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>
               Receipt Layout Blocks (Drag ⠿ to Reorder):
             </span>
             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-              Click block to expand settings
+              Click block to expand typography &amp; toggles
             </span>
           </div>
 
@@ -539,9 +620,10 @@ export default function PrintScriptEditor({ onNavigateBack }) {
                   {/* Expandable Visual Block Settings */}
                   {isExpanded && (
                     <div className="block-card-body">
+                      
                       {/* 1. Header Block Settings */}
                       {b.id === 'header' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <div>
                             <label className="form-label" style={{ fontSize: '10px' }}>Custom Shop Title (Optional)</label>
                             <input
@@ -554,8 +636,44 @@ export default function PrintScriptEditor({ onNavigateBack }) {
                             />
                           </div>
 
+                          {/* Header Typography: Title Size & Weight */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Title Font Size</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.title_size || '14px'}
+                                onChange={(e) => handleUpdateBlockProp('header', 'title_size', e.target.value)}
+                              >
+                                <option value="11px">11px (Small)</option>
+                                <option value="12px">12px (Compact)</option>
+                                <option value="13px">13px (Medium)</option>
+                                <option value="14px">14px (Standard Large)</option>
+                                <option value="16px">16px (Extra Large)</option>
+                                <option value="18px">18px (Huge Header)</option>
+                                <option value="20px">20px (Maximum)</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Title Font Weight</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.title_weight || '900'}
+                                onChange={(e) => handleUpdateBlockProp('header', 'title_weight', e.target.value)}
+                              >
+                                <option value="600">600 (Semi-Bold)</option>
+                                <option value="700">700 (Bold)</option>
+                                <option value="800">800 (Extra Bold)</option>
+                                <option value="900">900 (Black / Ultra Heavy)</option>
+                              </select>
+                            </div>
+                          </div>
+
                           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Alignment:</span>
+                            <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>Alignment:</span>
                             {['left', 'center', 'right'].map(align => (
                               <button
                                 key={align}
@@ -575,7 +693,7 @@ export default function PrintScriptEditor({ onNavigateBack }) {
                             ))}
                           </div>
 
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '4px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '2px' }}>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
                               <input
                                 type="checkbox"
@@ -617,103 +735,237 @@ export default function PrintScriptEditor({ onNavigateBack }) {
 
                       {/* 2. Meta Block Settings */}
                       {b.id === 'meta' && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={b.show_date_time !== false}
-                              onChange={(e) => handleUpdateBlockProp('meta', 'show_date_time', e.target.checked)}
-                            />
-                            Show Date &amp; Time
-                          </label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Text Size</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.meta_size || '9.5px'}
+                                onChange={(e) => handleUpdateBlockProp('meta', 'meta_size', e.target.value)}
+                              >
+                                <option value="8px">8px (Tiny)</option>
+                                <option value="8.5px">8.5px (Compact)</option>
+                                <option value="9.5px">9.5px (Standard)</option>
+                                <option value="10.5px">10.5px (Large)</option>
+                              </select>
+                            </div>
 
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={b.show_stream !== false}
-                              onChange={(e) => handleUpdateBlockProp('meta', 'show_stream', e.target.checked)}
-                            />
-                            Show Sale Type (Counter / Workshop)
-                          </label>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Text Weight</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.meta_weight || '500'}
+                                onChange={(e) => handleUpdateBlockProp('meta', 'meta_weight', e.target.value)}
+                              >
+                                <option value="400">400 (Regular)</option>
+                                <option value="500">500 (Medium)</option>
+                                <option value="600">600 (Semi-Bold)</option>
+                                <option value="700">700 (Bold)</option>
+                              </select>
+                            </div>
+                          </div>
 
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={b.show_payment !== false}
-                              onChange={(e) => handleUpdateBlockProp('meta', 'show_payment', e.target.checked)}
-                            />
-                            Show Payment Method
-                          </label>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_date_time !== false}
+                                onChange={(e) => handleUpdateBlockProp('meta', 'show_date_time', e.target.checked)}
+                              />
+                              Show Date &amp; Time
+                            </label>
+
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_stream !== false}
+                                onChange={(e) => handleUpdateBlockProp('meta', 'show_stream', e.target.checked)}
+                              />
+                              Show Sale Type
+                            </label>
+
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_payment !== false}
+                                onChange={(e) => handleUpdateBlockProp('meta', 'show_payment', e.target.checked)}
+                              />
+                              Show Payment Method
+                            </label>
+                          </div>
                         </div>
                       )}
 
                       {/* 3. Customer Block Settings */}
                       {b.id === 'customer' && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={b.show_name !== false}
-                              onChange={(e) => handleUpdateBlockProp('customer', 'show_name', e.target.checked)}
-                            />
-                            Customer Name &amp; Phone
-                          </label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Text Size</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.customer_size || '9px'}
+                                onChange={(e) => handleUpdateBlockProp('customer', 'customer_size', e.target.value)}
+                              >
+                                <option value="8px">8px (Compact)</option>
+                                <option value="9px">9px (Standard)</option>
+                                <option value="10px">10px (Large)</option>
+                              </select>
+                            </div>
 
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={b.show_bike !== false}
-                              onChange={(e) => handleUpdateBlockProp('customer', 'show_bike', e.target.checked)}
-                            />
-                            Motorcycle Model &amp; Reg #
-                          </label>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Text Weight</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.customer_weight || '500'}
+                                onChange={(e) => handleUpdateBlockProp('customer', 'customer_weight', e.target.value)}
+                              >
+                                <option value="400">400 (Regular)</option>
+                                <option value="500">500 (Medium)</option>
+                                <option value="600">600 (Semi-Bold)</option>
+                                <option value="700">700 (Bold)</option>
+                              </select>
+                            </div>
+                          </div>
 
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={b.show_mechanic !== false}
-                              onChange={(e) => handleUpdateBlockProp('customer', 'show_mechanic', e.target.checked)}
-                            />
-                            Assigned Mechanic Name
-                          </label>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_name !== false}
+                                onChange={(e) => handleUpdateBlockProp('customer', 'show_name', e.target.checked)}
+                              />
+                              Customer Name &amp; Phone
+                            </label>
 
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={b.show_chassis === true}
-                              onChange={(e) => handleUpdateBlockProp('customer', 'show_chassis', e.target.checked)}
-                            />
-                            Chassis Number
-                          </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_bike !== false}
+                                onChange={(e) => handleUpdateBlockProp('customer', 'show_bike', e.target.checked)}
+                              />
+                              Motorcycle Model &amp; Reg #
+                            </label>
+
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_mechanic !== false}
+                                onChange={(e) => handleUpdateBlockProp('customer', 'show_mechanic', e.target.checked)}
+                              />
+                              Assigned Mechanic Name
+                            </label>
+
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_chassis === true}
+                                onChange={(e) => handleUpdateBlockProp('customer', 'show_chassis', e.target.checked)}
+                              />
+                              Chassis Number
+                            </label>
+                          </div>
                         </div>
                       )}
 
                       {/* 4. Items Table Settings */}
                       {b.id === 'items' && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={b.show_part_numbers !== false}
-                              onChange={(e) => handleUpdateBlockProp('items', 'show_part_numbers', e.target.checked)}
-                            />
-                            Show Part Numbers (Uncheck to save ~25% paper!)
-                          </label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {/* Typography: Table Size & Item Name Weight */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Table Text Size</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.table_font_size || '9.5px'}
+                                onChange={(e) => handleUpdateBlockProp('items', 'table_font_size', e.target.value)}
+                              >
+                                <option value="8px">8px (Ultra Compact)</option>
+                                <option value="8.5px">8.5px (Compact)</option>
+                                <option value="9px">9px (Tight)</option>
+                                <option value="9.5px">9.5px (Standard Retail)</option>
+                                <option value="10.5px">10.5px (Large High-Legibility)</option>
+                                <option value="11.5px">11.5px (Extra Large)</option>
+                              </select>
+                            </div>
 
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={b.show_unit_rate !== false}
-                              onChange={(e) => handleUpdateBlockProp('items', 'show_unit_rate', e.target.checked)}
-                            />
-                            Show Unit Rate Column
-                          </label>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Item Title Weight</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.item_name_weight || '700'}
+                                onChange={(e) => handleUpdateBlockProp('items', 'item_name_weight', e.target.value)}
+                              >
+                                <option value="500">500 (Medium)</option>
+                                <option value="600">600 (Semi-Bold)</option>
+                                <option value="700">700 (Bold)</option>
+                                <option value="800">800 (Extra Bold Contrast)</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_part_numbers !== false}
+                                onChange={(e) => handleUpdateBlockProp('items', 'show_part_numbers', e.target.checked)}
+                              />
+                              Show Part Numbers (Uncheck to save ~25% paper!)
+                            </label>
+
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_unit_rate !== false}
+                                onChange={(e) => handleUpdateBlockProp('items', 'show_unit_rate', e.target.checked)}
+                              />
+                              Show Unit Rate Column
+                            </label>
+                          </div>
                         </div>
                       )}
 
                       {/* 5. Labor Settings */}
                       {b.id === 'labor' && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '6px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Text Size</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.labor_size || '9.5px'}
+                                onChange={(e) => handleUpdateBlockProp('labor', 'labor_size', e.target.value)}
+                              >
+                                <option value="8.5px">8.5px (Compact)</option>
+                                <option value="9.5px">9.5px (Standard)</option>
+                                <option value="10.5px">10.5px (Large)</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Amount Weight</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.labor_weight || '600'}
+                                onChange={(e) => handleUpdateBlockProp('labor', 'labor_weight', e.target.value)}
+                              >
+                                <option value="500">500 (Medium)</option>
+                                <option value="600">600 (Semi-Bold)</option>
+                                <option value="700">700 (Bold)</option>
+                              </select>
+                            </div>
+                          </div>
+
                           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
                             <input
                               type="checkbox"
@@ -727,52 +979,106 @@ export default function PrintScriptEditor({ onNavigateBack }) {
 
                       {/* 6. Totals Settings */}
                       {b.id === 'totals' && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={b.show_subtotal !== false}
-                              onChange={(e) => handleUpdateBlockProp('totals', 'show_subtotal', e.target.checked)}
-                            />
-                            Show Subtotal Line
-                          </label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {/* Typography: Grand Total Size & Weight */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Grand Total Size</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.grand_total_size_px || '13.5px'}
+                                onChange={(e) => handleUpdateBlockProp('totals', 'grand_total_size_px', e.target.value)}
+                              >
+                                <option value="10.5px">10.5px (Compact)</option>
+                                <option value="12px">12px (Standard)</option>
+                                <option value="13.5px">13.5px (Prominent Large)</option>
+                                <option value="15px">15px (Extra Bold Large)</option>
+                                <option value="17px">17px (Huge Contrast)</option>
+                                <option value="19px">19px (Maximum Punch)</option>
+                              </select>
+                            </div>
 
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={b.show_discount !== false}
-                              onChange={(e) => handleUpdateBlockProp('totals', 'show_discount', e.target.checked)}
-                            />
-                            Show Discount Breakdown
-                          </label>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Grand Total Weight</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.grand_total_weight || '900'}
+                                onChange={(e) => handleUpdateBlockProp('totals', 'grand_total_weight', e.target.value)}
+                              >
+                                <option value="700">700 (Bold)</option>
+                                <option value="800">800 (Extra Bold)</option>
+                                <option value="900">900 (Black / Ultra Heavy)</option>
+                              </select>
+                            </div>
+                          </div>
 
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={b.show_cash_paid !== false}
-                              onChange={(e) => handleUpdateBlockProp('totals', 'show_cash_paid', e.target.checked)}
-                            />
-                            Show Cash Received &amp; Change
-                          </label>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_subtotal !== false}
+                                onChange={(e) => handleUpdateBlockProp('totals', 'show_subtotal', e.target.checked)}
+                              />
+                              Show Subtotal Line
+                            </label>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Grand Total Size:</span>
-                            <select
-                              className="form-select"
-                              style={{ fontSize: '10.5px', padding: '2px 4px' }}
-                              value={b.grand_total_size || 'large'}
-                              onChange={(e) => handleUpdateBlockProp('totals', 'grand_total_size', e.target.value)}
-                            >
-                              <option value="standard">Standard Bold</option>
-                              <option value="large">Extra Large (High Visibility)</option>
-                            </select>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_discount !== false}
+                                onChange={(e) => handleUpdateBlockProp('totals', 'show_discount', e.target.checked)}
+                              />
+                              Show Discount Breakdown
+                            </label>
+
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_cash_paid !== false}
+                                onChange={(e) => handleUpdateBlockProp('totals', 'show_cash_paid', e.target.checked)}
+                              />
+                              Show Cash Received &amp; Change
+                            </label>
                           </div>
                         </div>
                       )}
 
                       {/* 7. Gate Pass Settings */}
                       {b.id === 'gate_pass' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Reg # Text Size</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.reg_size || '9.5px'}
+                                onChange={(e) => handleUpdateBlockProp('gate_pass', 'reg_size', e.target.value)}
+                              >
+                                <option value="8.5px">8.5px (Compact)</option>
+                                <option value="9.5px">9.5px (Standard)</option>
+                                <option value="11px">11px (Large)</option>
+                                <option value="12.5px">12.5px (Extra Bold)</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Reg # Weight</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.reg_weight || '900'}
+                                onChange={(e) => handleUpdateBlockProp('gate_pass', 'reg_weight', e.target.value)}
+                              >
+                                <option value="700">700 (Bold)</option>
+                                <option value="800">800 (Extra Bold)</option>
+                                <option value="900">900 (Black / Ultra)</option>
+                              </select>
+                            </div>
+                          </div>
+
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Barcode Height:</span>
                             {[20, 26, 32].map(h => (
@@ -807,7 +1113,39 @@ export default function PrintScriptEditor({ onNavigateBack }) {
 
                       {/* 8. Footer Settings */}
                       {b.id === 'footer' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Footer Text Size</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.footer_size || '8.5px'}
+                                onChange={(e) => handleUpdateBlockProp('footer', 'footer_size', e.target.value)}
+                              >
+                                <option value="7px">7px (Micro)</option>
+                                <option value="7.5px">7.5px (Tiny)</option>
+                                <option value="8.5px">8.5px (Standard)</option>
+                                <option value="9.5px">9.5px (Large)</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="form-label" style={{ fontSize: '10px' }}>Greeting Weight</label>
+                              <select
+                                className="form-select"
+                                style={{ fontSize: '10.5px', padding: '3px 6px' }}
+                                value={b.greeting_weight || '600'}
+                                onChange={(e) => handleUpdateBlockProp('footer', 'greeting_weight', e.target.value)}
+                              >
+                                <option value="400">400 (Regular)</option>
+                                <option value="500">500 (Medium)</option>
+                                <option value="600">600 (Semi-Bold)</option>
+                                <option value="700">700 (Bold)</option>
+                              </select>
+                            </div>
+                          </div>
+
                           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
                             <input
                               type="checkbox"
@@ -827,6 +1165,7 @@ export default function PrintScriptEditor({ onNavigateBack }) {
                           </label>
                         </div>
                       )}
+
                     </div>
                   )}
                 </div>

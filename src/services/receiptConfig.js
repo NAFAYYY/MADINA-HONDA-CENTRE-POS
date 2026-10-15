@@ -1,11 +1,49 @@
 // Receipt Layout Configuration and Presets for Visual Drag-and-Drop Designer
 import JsBarcode from 'jsbarcode';
 
+export const FONT_FAMILY_MAP = {
+  monospace: "'Courier New', Courier, monospace",
+  jetbrains: "'JetBrains Mono', monospace",
+  outfit: "'Outfit', system-ui, sans-serif",
+  sans: "Arial, Helvetica, sans-serif",
+  consolas: "'Consolas', 'Lucida Console', monospace",
+  impact: "'Impact', 'Arial Black', sans-serif"
+};
+
+export const FONT_FAMILIES = [
+  { id: 'monospace', name: 'Courier New', note: 'Classic Thermal Monospace' },
+  { id: 'jetbrains', name: 'JetBrains Mono', note: 'Modern Crisp Tech' },
+  { id: 'outfit', name: 'Outfit Sans', note: 'Clean Dealership' },
+  { id: 'sans', name: 'Arial / Helvetica', note: 'Clean Standard' },
+  { id: 'consolas', name: 'Consolas', note: 'Fixed-Width Terminal' },
+  { id: 'impact', name: 'Impact', note: 'Heavy Compact Bold' }
+];
+
+export const FONT_SIZES = [
+  { id: '8.5px', label: '8.5px (Micro - Max Saving)' },
+  { id: '9.5px', label: '9.5px (Ultra Compact)' },
+  { id: '10.5px', label: '10.5px (Standard Retail)' },
+  { id: '11.5px', label: '11.5px (Comfortable)' },
+  { id: '12.5px', label: '12.5px (Large)' },
+  { id: '14px', label: '14px (Extra Large)' }
+];
+
+export const FONT_WEIGHTS = [
+  { id: '400', label: 'Regular (400)' },
+  { id: '500', label: 'Medium (500)' },
+  { id: '600', label: 'Semi-Bold (600)' },
+  { id: '700', label: 'Bold (700)' },
+  { id: '800', label: 'Extra Bold (800)' },
+  { id: '900', label: 'Black / Heavy (900)' }
+];
+
 export const DEFAULT_RECEIPT_CONFIG = {
   paper_size: '80mm', // '80mm' | '58mm'
   width_mm: 72, // 72 for 80mm roll, 48 for 58mm roll
   density: 'compact', // 'ultra-compact', 'compact', 'spacious'
-  font_size: '10.5px', // '9.5px', '10.5px', '11.5px'
+  font_family: 'monospace', // 'monospace', 'jetbrains', 'outfit', 'sans', 'consolas', 'impact'
+  font_size: '10.5px', // base size
+  font_weight: '500', // base weight
   line_spacing: '1.2',
   divider_style: 'dashed', // 'dashed', 'dotted', 'solid', 'none'
   blocks: [
@@ -15,6 +53,8 @@ export const DEFAULT_RECEIPT_CONFIG = {
       icon: 'Building2',
       visible: true,
       align: 'center',
+      title_size: '14px',
+      title_weight: '900',
       show_tagline: true,
       show_address: true,
       show_phone: true,
@@ -26,6 +66,8 @@ export const DEFAULT_RECEIPT_CONFIG = {
       name: 'Invoice Number & Date',
       icon: 'FileText',
       visible: true,
+      meta_size: '9.5px',
+      meta_weight: '500',
       show_stream: true,
       show_payment: true,
       show_date_time: true,
@@ -35,6 +77,8 @@ export const DEFAULT_RECEIPT_CONFIG = {
       name: 'Customer & Motorcycle Details',
       icon: 'User',
       visible: true,
+      customer_size: '9px',
+      customer_weight: '500',
       show_name: true,
       show_bike: true,
       show_reg_number: true,
@@ -46,6 +90,8 @@ export const DEFAULT_RECEIPT_CONFIG = {
       name: 'Spare Parts Items Table',
       icon: 'ShoppingBag',
       visible: true,
+      table_font_size: '9.5px',
+      item_name_weight: '700',
       show_part_numbers: true,
       show_unit_rate: true,
       compact_rows: true,
@@ -55,6 +101,8 @@ export const DEFAULT_RECEIPT_CONFIG = {
       name: 'Workshop Labor Charges Line',
       icon: 'Wrench',
       visible: true,
+      labor_size: '9.5px',
+      labor_weight: '600',
       show_work_type: true,
     },
     {
@@ -62,16 +110,20 @@ export const DEFAULT_RECEIPT_CONFIG = {
       name: 'Subtotal & Grand Total',
       icon: 'Calculator',
       visible: true,
+      subtotal_size: '9.5px',
+      grand_total_size_px: '13.5px',
+      grand_total_weight: '900',
       show_subtotal: true,
       show_discount: true,
       show_cash_paid: true,
-      grand_total_size: 'large',
     },
     {
       id: 'gate_pass',
       name: 'Official Barcoded Gate Pass',
       icon: 'ShieldCheck',
       visible: true,
+      reg_size: '9.5px',
+      reg_weight: '900',
       barcode_height: 28,
       show_security_note: true,
     },
@@ -80,6 +132,9 @@ export const DEFAULT_RECEIPT_CONFIG = {
       name: 'Footer Message & Return Policy',
       icon: 'MessageSquare',
       visible: true,
+      footer_size: '8.5px',
+      greeting_weight: '600',
+      disclaimer_weight: '400',
       show_greeting: true,
       show_disclaimer: true,
       align: 'center',
@@ -98,18 +153,20 @@ export const RECEIPT_PRESETS = {
       paper_size: '80mm',
       width_mm: 72,
       density: 'ultra-compact',
-      font_size: '9.5px',
+      font_family: 'monospace',
+      font_size: '9px',
+      font_weight: '500',
       line_spacing: '1.1',
       divider_style: 'dotted',
       blocks: [
-        { id: 'header', name: 'Store Header & Dealership Branding', icon: 'Building2', visible: true, align: 'center', show_tagline: false, show_address: true, show_phone: true, show_ntn: false, custom_title: '' },
-        { id: 'meta', name: 'Invoice Number & Date', icon: 'FileText', visible: true, show_stream: true, show_payment: true, show_date_time: true },
-        { id: 'customer', name: 'Customer & Motorcycle Details', icon: 'User', visible: true, show_name: true, show_bike: true, show_reg_number: true, show_mechanic: false, show_chassis: false },
-        { id: 'items', name: 'Spare Parts Items Table', icon: 'ShoppingBag', visible: true, show_part_numbers: false, show_unit_rate: false, compact_rows: true },
-        { id: 'labor', name: 'Workshop Labor Charges Line', icon: 'Wrench', visible: true, show_work_type: false },
-        { id: 'totals', name: 'Subtotal & Grand Total', icon: 'Calculator', visible: true, show_subtotal: false, show_discount: true, show_cash_paid: false, grand_total_size: 'standard' },
-        { id: 'gate_pass', name: 'Official Barcoded Gate Pass', icon: 'ShieldCheck', visible: false, barcode_height: 22, show_security_note: false },
-        { id: 'footer', name: 'Footer Message & Return Policy', icon: 'MessageSquare', visible: true, show_greeting: true, show_disclaimer: false, align: 'center', custom_greeting: '', custom_disclaimer: '' }
+        { id: 'header', name: 'Store Header & Dealership Branding', icon: 'Building2', visible: true, align: 'center', title_size: '12px', title_weight: '700', show_tagline: false, show_address: true, show_phone: true, show_ntn: false, custom_title: '' },
+        { id: 'meta', name: 'Invoice Number & Date', icon: 'FileText', visible: true, meta_size: '8.5px', meta_weight: '500', show_stream: true, show_payment: true, show_date_time: true },
+        { id: 'customer', name: 'Customer & Motorcycle Details', icon: 'User', visible: true, customer_size: '8.5px', customer_weight: '500', show_name: true, show_bike: true, show_reg_number: true, show_mechanic: false, show_chassis: false },
+        { id: 'items', name: 'Spare Parts Items Table', icon: 'ShoppingBag', visible: true, table_font_size: '8.5px', item_name_weight: '600', show_part_numbers: false, show_unit_rate: false, compact_rows: true },
+        { id: 'labor', name: 'Workshop Labor Charges Line', icon: 'Wrench', visible: true, labor_size: '8.5px', labor_weight: '600', show_work_type: false },
+        { id: 'totals', name: 'Subtotal & Grand Total', icon: 'Calculator', visible: true, subtotal_size: '8.5px', grand_total_size_px: '11px', grand_total_weight: '800', show_subtotal: false, show_discount: true, show_cash_paid: false },
+        { id: 'gate_pass', name: 'Official Barcoded Gate Pass', icon: 'ShieldCheck', visible: false, reg_size: '8.5px', reg_weight: '700', barcode_height: 22, show_security_note: false },
+        { id: 'footer', name: 'Footer Message & Return Policy', icon: 'MessageSquare', visible: true, footer_size: '7.5px', greeting_weight: '500', disclaimer_weight: '400', show_greeting: true, show_disclaimer: false, align: 'center', custom_greeting: '', custom_disclaimer: '' }
       ]
     }
   },
@@ -121,18 +178,20 @@ export const RECEIPT_PRESETS = {
       paper_size: '80mm',
       width_mm: 72,
       density: 'compact',
+      font_family: 'monospace',
       font_size: '10.5px',
+      font_weight: '500',
       line_spacing: '1.2',
       divider_style: 'dashed',
       blocks: [
-        { id: 'header', name: 'Store Header & Dealership Branding', icon: 'Building2', visible: true, align: 'center', show_tagline: true, show_address: true, show_phone: true, show_ntn: true, custom_title: '' },
-        { id: 'meta', name: 'Invoice Number & Date', icon: 'FileText', visible: true, show_stream: true, show_payment: true, show_date_time: true },
-        { id: 'customer', name: 'Customer & Motorcycle Details', icon: 'User', visible: true, show_name: true, show_bike: false, show_reg_number: false, show_mechanic: false, show_chassis: false },
-        { id: 'items', name: 'Spare Parts Items Table', icon: 'ShoppingBag', visible: true, show_part_numbers: true, show_unit_rate: true, compact_rows: true },
-        { id: 'labor', name: 'Workshop Labor Charges Line', icon: 'Wrench', visible: false, show_work_type: false },
-        { id: 'totals', name: 'Subtotal & Grand Total', icon: 'Calculator', visible: true, show_subtotal: true, show_discount: true, show_cash_paid: true, grand_total_size: 'large' },
-        { id: 'gate_pass', name: 'Official Barcoded Gate Pass', icon: 'ShieldCheck', visible: false, barcode_height: 28, show_security_note: true },
-        { id: 'footer', name: 'Footer Message & Return Policy', icon: 'MessageSquare', visible: true, show_greeting: true, show_disclaimer: true, align: 'center', custom_greeting: '', custom_disclaimer: '' }
+        { id: 'header', name: 'Store Header & Dealership Branding', icon: 'Building2', visible: true, align: 'center', title_size: '14px', title_weight: '900', show_tagline: true, show_address: true, show_phone: true, show_ntn: true, custom_title: '' },
+        { id: 'meta', name: 'Invoice Number & Date', icon: 'FileText', visible: true, meta_size: '9.5px', meta_weight: '500', show_stream: true, show_payment: true, show_date_time: true },
+        { id: 'customer', name: 'Customer & Motorcycle Details', icon: 'User', visible: true, customer_size: '9px', customer_weight: '500', show_name: true, show_bike: false, show_reg_number: false, show_mechanic: false, show_chassis: false },
+        { id: 'items', name: 'Spare Parts Items Table', icon: 'ShoppingBag', visible: true, table_font_size: '9.5px', item_name_weight: '700', show_part_numbers: true, show_unit_rate: true, compact_rows: true },
+        { id: 'labor', name: 'Workshop Labor Charges Line', icon: 'Wrench', visible: false, labor_size: '9.5px', labor_weight: '600', show_work_type: false },
+        { id: 'totals', name: 'Subtotal & Grand Total', icon: 'Calculator', visible: true, subtotal_size: '9.5px', grand_total_size_px: '13.5px', grand_total_weight: '900', show_subtotal: true, show_discount: true, show_cash_paid: true },
+        { id: 'gate_pass', name: 'Official Barcoded Gate Pass', icon: 'ShieldCheck', visible: false, reg_size: '9.5px', reg_weight: '900', barcode_height: 28, show_security_note: true },
+        { id: 'footer', name: 'Footer Message & Return Policy', icon: 'MessageSquare', visible: true, footer_size: '8.5px', greeting_weight: '600', disclaimer_weight: '400', show_greeting: true, show_disclaimer: true, align: 'center', custom_greeting: '', custom_disclaimer: '' }
       ]
     }
   },
@@ -144,18 +203,20 @@ export const RECEIPT_PRESETS = {
       paper_size: '80mm',
       width_mm: 72,
       density: 'compact',
+      font_family: 'jetbrains',
       font_size: '10.5px',
+      font_weight: '500',
       line_spacing: '1.2',
       divider_style: 'dashed',
       blocks: [
-        { id: 'header', name: 'Store Header & Dealership Branding', icon: 'Building2', visible: true, align: 'center', show_tagline: true, show_address: true, show_phone: true, show_ntn: true, custom_title: '' },
-        { id: 'meta', name: 'Invoice Number & Date', icon: 'FileText', visible: true, show_stream: true, show_payment: true, show_date_time: true },
-        { id: 'customer', name: 'Customer & Motorcycle Details', icon: 'User', visible: true, show_name: true, show_bike: true, show_reg_number: true, show_mechanic: true, show_chassis: true },
-        { id: 'items', name: 'Spare Parts Items Table', icon: 'ShoppingBag', visible: true, show_part_numbers: true, show_unit_rate: true, compact_rows: true },
-        { id: 'labor', name: 'Workshop Labor Charges Line', icon: 'Wrench', visible: true, show_work_type: true },
-        { id: 'totals', name: 'Subtotal & Grand Total', icon: 'Calculator', visible: true, show_subtotal: true, show_discount: true, show_cash_paid: true, grand_total_size: 'large' },
-        { id: 'gate_pass', name: 'Official Barcoded Gate Pass', icon: 'ShieldCheck', visible: true, barcode_height: 28, show_security_note: true },
-        { id: 'footer', name: 'Footer Message & Return Policy', icon: 'MessageSquare', visible: true, show_greeting: true, show_disclaimer: true, align: 'center', custom_greeting: '', custom_disclaimer: '' }
+        { id: 'header', name: 'Store Header & Dealership Branding', icon: 'Building2', visible: true, align: 'center', title_size: '15px', title_weight: '900', show_tagline: true, show_address: true, show_phone: true, show_ntn: true, custom_title: '' },
+        { id: 'meta', name: 'Invoice Number & Date', icon: 'FileText', visible: true, meta_size: '9.5px', meta_weight: '500', show_stream: true, show_payment: true, show_date_time: true },
+        { id: 'customer', name: 'Customer & Motorcycle Details', icon: 'User', visible: true, customer_size: '9px', customer_weight: '500', show_name: true, show_bike: true, show_reg_number: true, show_mechanic: true, show_chassis: true },
+        { id: 'items', name: 'Spare Parts Items Table', icon: 'ShoppingBag', visible: true, table_font_size: '9.5px', item_name_weight: '700', show_part_numbers: true, show_unit_rate: true, compact_rows: true },
+        { id: 'labor', name: 'Workshop Labor Charges Line', icon: 'Wrench', visible: true, labor_size: '9.5px', labor_weight: '600', show_work_type: true },
+        { id: 'totals', name: 'Subtotal & Grand Total', icon: 'Calculator', visible: true, subtotal_size: '9.5px', grand_total_size_px: '14px', grand_total_weight: '900', show_subtotal: true, show_discount: true, show_cash_paid: true },
+        { id: 'gate_pass', name: 'Official Barcoded Gate Pass', icon: 'ShieldCheck', visible: true, reg_size: '10px', reg_weight: '900', barcode_height: 28, show_security_note: true },
+        { id: 'footer', name: 'Footer Message & Return Policy', icon: 'MessageSquare', visible: true, footer_size: '8.5px', greeting_weight: '600', disclaimer_weight: '400', show_greeting: true, show_disclaimer: true, align: 'center', custom_greeting: '', custom_disclaimer: '' }
       ]
     }
   },
@@ -167,18 +228,20 @@ export const RECEIPT_PRESETS = {
       paper_size: '58mm',
       width_mm: 48,
       density: 'ultra-compact',
+      font_family: 'monospace',
       font_size: '9px',
+      font_weight: '500',
       line_spacing: '1.15',
       divider_style: 'dashed',
       blocks: [
-        { id: 'header', name: 'Store Header & Dealership Branding', icon: 'Building2', visible: true, align: 'center', show_tagline: false, show_address: true, show_phone: true, show_ntn: false, custom_title: '' },
-        { id: 'meta', name: 'Invoice Number & Date', icon: 'FileText', visible: true, show_stream: true, show_payment: true, show_date_time: true },
-        { id: 'customer', name: 'Customer & Motorcycle Details', icon: 'User', visible: true, show_name: true, show_bike: true, show_reg_number: true, show_mechanic: false, show_chassis: false },
-        { id: 'items', name: 'Spare Parts Items Table', icon: 'ShoppingBag', visible: true, show_part_numbers: false, show_unit_rate: false, compact_rows: true },
-        { id: 'labor', name: 'Workshop Labor Charges Line', icon: 'Wrench', visible: true, show_work_type: false },
-        { id: 'totals', name: 'Subtotal & Grand Total', icon: 'Calculator', visible: true, show_subtotal: false, show_discount: true, show_cash_paid: false, grand_total_size: 'standard' },
-        { id: 'gate_pass', name: 'Official Barcoded Gate Pass', icon: 'ShieldCheck', visible: true, barcode_height: 24, show_security_note: false },
-        { id: 'footer', name: 'Footer Message & Return Policy', icon: 'MessageSquare', visible: true, show_greeting: true, show_disclaimer: false, align: 'center', custom_greeting: '', custom_disclaimer: '' }
+        { id: 'header', name: 'Store Header & Dealership Branding', icon: 'Building2', visible: true, align: 'center', title_size: '11.5px', title_weight: '800', show_tagline: false, show_address: true, show_phone: true, show_ntn: false, custom_title: '' },
+        { id: 'meta', name: 'Invoice Number & Date', icon: 'FileText', visible: true, meta_size: '8px', meta_weight: '500', show_stream: true, show_payment: true, show_date_time: true },
+        { id: 'customer', name: 'Customer & Motorcycle Details', icon: 'User', visible: true, customer_size: '8px', customer_weight: '500', show_name: true, show_bike: true, show_reg_number: true, show_mechanic: false, show_chassis: false },
+        { id: 'items', name: 'Spare Parts Items Table', icon: 'ShoppingBag', visible: true, table_font_size: '8.5px', item_name_weight: '600', show_part_numbers: false, show_unit_rate: false, compact_rows: true },
+        { id: 'labor', name: 'Workshop Labor Charges Line', icon: 'Wrench', visible: true, labor_size: '8.5px', labor_weight: '600', show_work_type: false },
+        { id: 'totals', name: 'Subtotal & Grand Total', icon: 'Calculator', visible: true, subtotal_size: '8.5px', grand_total_size_px: '10.5px', grand_total_weight: '800', show_subtotal: false, show_discount: true, show_cash_paid: false },
+        { id: 'gate_pass', name: 'Official Barcoded Gate Pass', icon: 'ShieldCheck', visible: true, reg_size: '8.5px', reg_weight: '800', barcode_height: 24, show_security_note: false },
+        { id: 'footer', name: 'Footer Message & Return Policy', icon: 'MessageSquare', visible: true, footer_size: '7.5px', greeting_weight: '500', disclaimer_weight: '400', show_greeting: true, show_disclaimer: false, align: 'center', custom_greeting: '', custom_disclaimer: '' }
       ]
     }
   }
@@ -214,9 +277,13 @@ export function generateReceiptHtml(config = DEFAULT_RECEIPT_CONFIG, invoiceData
   const paperSize = config.paper_size || '80mm';
   const widthMm = paperSize === '58mm' ? 48 : (Number(config.width_mm) || 72);
   const fontSize = config.font_size || (paperSize === '58mm' ? '9.5px' : '10.5px');
+  const fontWeight = config.font_weight || '500';
   const lineSpacing = config.line_spacing || '1.2';
   const dividerStyle = config.divider_style || 'dashed';
-  const fontFamily = systemSettings.print_font_family || "'Courier New', Courier, monospace";
+
+  // Font family resolution: Check config.font_family against map, then fallback to system settings
+  const fontFamilyKey = config.font_family || 'monospace';
+  const fontFamily = FONT_FAMILY_MAP[fontFamilyKey] || systemSettings.print_font_family || "'Courier New', Courier, monospace";
 
   const dividerBorder = dividerStyle === 'none' ? 'none' : `1px ${dividerStyle} #000`;
   const dividerHtml = dividerStyle === 'none' ? '' : `<div style="border-top: ${dividerBorder}; margin: 3px 0;"></div>`;
@@ -239,10 +306,12 @@ export function generateReceiptHtml(config = DEFAULT_RECEIPT_CONFIG, invoiceData
         const phone = systemSettings.store_phone || '0300-1234567';
         const ntn = systemSettings.store_ntn;
         const align = block.align || 'center';
+        const titleSize = block.title_size || (paperSize === '58mm' ? '12px' : '14px');
+        const titleWeight = block.title_weight || '900';
 
         blockHtmls.push(`
           <div style="text-align: ${align}; margin-bottom: 4px;">
-            <div style="font-size: ${paperSize === '58mm' ? '12px' : '14px'}; font-weight: 900; letter-spacing: 0.5px; line-height: 1.15;">
+            <div style="font-size: ${titleSize}; font-weight: ${titleWeight}; letter-spacing: 0.5px; line-height: 1.15;">
               ${storeName}
             </div>
             ${block.show_tagline && tagline ? `
@@ -271,8 +340,11 @@ export function generateReceiptHtml(config = DEFAULT_RECEIPT_CONFIG, invoiceData
       }
 
       case 'meta': {
+        const metaSize = block.meta_size || (paperSize === '58mm' ? '8px' : '9.5px');
+        const metaWeight = block.meta_weight || '500';
+
         blockHtmls.push(`
-          <div style="font-size: ${paperSize === '58mm' ? '8px' : '9.5px'}; margin-bottom: 3px;">
+          <div style="font-size: ${metaSize}; font-weight: ${metaWeight}; margin-bottom: 3px;">
             <div style="display: flex; justify-content: space-between;">
               <span><strong>Inv #:</strong> ${sale.invoice_number || 'INV-DRAFT'}</span>
               ${block.show_date_time ? `<span>${formattedDate} ${formattedTime}</span>` : ''}
@@ -292,9 +364,11 @@ export function generateReceiptHtml(config = DEFAULT_RECEIPT_CONFIG, invoiceData
         const hasCustomer = sale.customer_name || (jobDetails && jobDetails.customer_name);
         const hasVehicle = jobDetails && jobDetails.reg_number;
         if (!hasCustomer && !hasVehicle) break;
+        const custSize = block.customer_size || (paperSize === '58mm' ? '8px' : '9px');
+        const custWeight = block.customer_weight || '500';
 
         blockHtmls.push(`
-          <div style="font-size: ${paperSize === '58mm' ? '8px' : '9px'}; background: #f8fafc; border: 1px dotted #999; padding: 2px 4px; margin-bottom: 4px; border-radius: 2px;">
+          <div style="font-size: ${custSize}; font-weight: ${custWeight}; background: #f8fafc; border: 1px dotted #999; padding: 2px 4px; margin-bottom: 4px; border-radius: 2px;">
             ${block.show_name && hasCustomer ? `
               <div><strong>Customer:</strong> ${sale.customer_name || (jobDetails && jobDetails.customer_name) || 'Walk-in'}</div>
             ` : ''}
@@ -315,25 +389,27 @@ export function generateReceiptHtml(config = DEFAULT_RECEIPT_CONFIG, invoiceData
       case 'items': {
         const showPartNums = block.show_part_numbers !== false;
         const showRates = block.show_unit_rate !== false && paperSize !== '58mm';
+        const tableSize = block.table_font_size || (paperSize === '58mm' ? '8.5px' : '9.5px');
+        const itemWeight = block.item_name_weight || '700';
 
         const rows = (items || []).map(it => `
           <tr style="border-bottom: 1px dotted #ccc;">
             <td style="padding: 2px 0; text-align: left;">
-              <div style="font-weight: 700;">${it.name || it.part_name || 'Part'}</div>
+              <div style="font-weight: ${itemWeight};">${it.name || it.part_name || 'Part'}</div>
               ${showPartNums && it.part_number ? `
                 <div style="font-size: 7.5px; color: #444;">${it.part_number}</div>
               ` : ''}
             </td>
             <td style="text-align: center; padding: 2px 0;">${it.quantity || 1}</td>
             ${showRates ? `<td style="text-align: right; padding: 2px 0;">${it.unit_price || 0}</td>` : ''}
-            <td style="text-align: right; padding: 2px 0; font-weight: 700;">${it.total_price || 0}</td>
+            <td style="text-align: right; padding: 2px 0; font-weight: ${itemWeight};">${it.total_price || 0}</td>
           </tr>
         `).join('');
 
         blockHtmls.push(`
-          <table style="width: 100%; font-size: ${paperSize === '58mm' ? '8.5px' : '9.5px'}; border-collapse: collapse; margin-bottom: 4px;">
+          <table style="width: 100%; font-size: ${tableSize}; border-collapse: collapse; margin-bottom: 4px;">
             <thead>
-              <tr style="border-bottom: 1px solid #000; border-top: 1px solid #000;">
+              <tr style="border-bottom: 1px solid #000; border-top: 1px solid #000; font-weight: 800;">
                 <th style="text-align: left; padding: 2px 0;">Item</th>
                 <th style="text-align: center; padding: 2px 0; width: 26px;">Qty</th>
                 ${showRates ? '<th style="text-align: right; padding: 2px 0; width: 40px;">Rate</th>' : ''}
@@ -350,10 +426,13 @@ export function generateReceiptHtml(config = DEFAULT_RECEIPT_CONFIG, invoiceData
 
       case 'labor': {
         if (jobDetails && Number(jobDetails.dynamic_labor_amount) > 0) {
+          const laborSize = block.labor_size || (paperSize === '58mm' ? '8.5px' : '9.5px');
+          const laborWeight = block.labor_weight || '600';
+
           blockHtmls.push(`
-            <div style="display: flex; justify-content: space-between; font-size: ${paperSize === '58mm' ? '8.5px' : '9.5px'}; font-style: italic; margin-bottom: 3px; border-bottom: 1px dotted #ccc; padding-bottom: 2px;">
+            <div style="display: flex; justify-content: space-between; font-size: ${laborSize}; font-style: italic; margin-bottom: 3px; border-bottom: 1px dotted #ccc; padding-bottom: 2px;">
               <span>Labor / Service: ${block.show_work_type && jobDetails.work_type ? jobDetails.work_type : 'Maintenance'}</span>
-              <span style="font-weight: 700;">PKR ${jobDetails.dynamic_labor_amount}</span>
+              <span style="font-weight: ${laborWeight};">PKR ${jobDetails.dynamic_labor_amount}</span>
             </div>
           `);
         }
@@ -361,9 +440,12 @@ export function generateReceiptHtml(config = DEFAULT_RECEIPT_CONFIG, invoiceData
       }
 
       case 'totals': {
-        const isLarge = block.grand_total_size === 'large';
+        const subtotalSize = block.subtotal_size || (paperSize === '58mm' ? '9px' : '10px');
+        const grandTotalSize = block.grand_total_size_px || (paperSize === '58mm' ? '11px' : '13.5px');
+        const grandTotalWeight = block.grand_total_weight || '900';
+
         blockHtmls.push(`
-          <div style="font-size: ${paperSize === '58mm' ? '9px' : '10px'}; border-top: 1px solid #000; padding-top: 3px; margin-bottom: 4px;">
+          <div style="font-size: ${subtotalSize}; border-top: 1px solid #000; padding-top: 3px; margin-bottom: 4px;">
             ${block.show_subtotal ? `
               <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
                 <span>Subtotal:</span>
@@ -376,7 +458,7 @@ export function generateReceiptHtml(config = DEFAULT_RECEIPT_CONFIG, invoiceData
                 <span>- PKR ${sale.discount}</span>
               </div>
             ` : ''}
-            <div style="display: flex; justify-content: space-between; font-weight: 900; font-size: ${isLarge ? (paperSize === '58mm' ? '11px' : '13px') : (paperSize === '58mm' ? '9.5px' : '11px')}; border-top: 1px dashed #000; padding-top: 2px; margin-top: 2px;">
+            <div style="display: flex; justify-content: space-between; font-weight: ${grandTotalWeight}; font-size: ${grandTotalSize}; border-top: 1px dashed #000; padding-top: 2px; margin-top: 2px;">
               <span>GRAND TOTAL:</span>
               <span>PKR ${sale.grand_total || 0}</span>
             </div>
@@ -393,6 +475,8 @@ export function generateReceiptHtml(config = DEFAULT_RECEIPT_CONFIG, invoiceData
 
       case 'gate_pass': {
         if ((sale.stream === 'inhouse' || jobDetails) && jobDetails && jobDetails.gate_pass_code) {
+          const regSize = block.reg_size || '9.5px';
+          const regWeight = block.reg_weight || '900';
           const barcodeSvg = getBarcodeSvgString(jobDetails.gate_pass_code, {
             height: block.barcode_height || 26,
             width: paperSize === '58mm' ? 1.0 : 1.15
@@ -403,7 +487,7 @@ export function generateReceiptHtml(config = DEFAULT_RECEIPT_CONFIG, invoiceData
               <div style="display: inline-block; background: #000; color: #fff; padding: 1px 6px; font-size: 8px; font-weight: 900; border-radius: 2px; letter-spacing: 0.5px;">
                 OFFICIAL BIKE RELEASE GATE PASS
               </div>
-              <div style="font-size: 9.5px; font-weight: 900; margin-top: 2px;">
+              <div style="font-size: ${regSize}; font-weight: ${regWeight}; margin-top: 2px;">
                 VEHICLE REG #: ${jobDetails.reg_number || 'N/A'}
               </div>
               ${block.show_security_note ? `
@@ -422,14 +506,17 @@ export function generateReceiptHtml(config = DEFAULT_RECEIPT_CONFIG, invoiceData
         const welcome = block.custom_greeting || systemSettings.receipt_welcome || 'Thank you for choosing Madina Honda Centre!';
         const disclaimer = block.custom_disclaimer || systemSettings.receipt_disclaimer || 'Atlas Honda Genuine Parts Guaranteed | No Return Without Receipt';
         const align = block.align || 'center';
+        const footerSize = block.footer_size || (paperSize === '58mm' ? '7.5px' : '8.5px');
+        const greetingWeight = block.greeting_weight || '600';
+        const disclaimerWeight = block.disclaimer_weight || '400';
 
         blockHtmls.push(`
-          <div style="text-align: ${align}; margin-top: 4px; border-top: ${dividerBorder}; padding-top: 3px; font-size: ${paperSize === '58mm' ? '7.5px' : '8.5px'};">
+          <div style="text-align: ${align}; margin-top: 4px; border-top: ${dividerBorder}; padding-top: 3px; font-size: ${footerSize};">
             ${block.show_greeting && welcome ? `
-              <div style="margin: 1px 0; font-weight: 600;">${welcome}</div>
+              <div style="margin: 1px 0; font-weight: ${greetingWeight};">${welcome}</div>
             ` : ''}
             ${block.show_disclaimer && disclaimer ? `
-              <div style="margin: 1px 0; font-size: 7px; color: #444;">${disclaimer}</div>
+              <div style="margin: 1px 0; font-size: 7px; font-weight: ${disclaimerWeight}; color: #444;">${disclaimer}</div>
             ` : ''}
           </div>
         `);
@@ -451,6 +538,7 @@ export function generateReceiptHtml(config = DEFAULT_RECEIPT_CONFIG, invoiceData
       color: #000000;
       font-family: ${fontFamily};
       font-size: ${fontSize};
+      font-weight: ${fontWeight};
       line-height: ${lineSpacing};
       box-sizing: border-box;
     ">
@@ -475,6 +563,7 @@ export async function fetchReceiptConfig() {
 }
 
 export async function saveReceiptConfig(config) {
+  const fontFamilyValue = FONT_FAMILY_MAP[config.font_family] || config.font_family || "'Courier New', Courier, monospace";
   const res = await fetch('/api/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -484,6 +573,8 @@ export async function saveReceiptConfig(config) {
         print_paper_size: config.paper_size,
         print_receipt_width_mm: String(config.width_mm),
         print_font_size: config.font_size,
+        print_font_weight: config.font_weight || '500',
+        print_font_family: fontFamilyValue,
         print_line_spacing: config.line_spacing,
       }
     })
