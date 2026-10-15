@@ -1,18 +1,76 @@
 import React, { useState } from 'react';
-import { Tag, Printer, X, Copy } from 'lucide-react';
+import { Tag, Printer, X } from 'lucide-react';
 import BarcodeCanvas from './BarcodeCanvas';
+import { getBarcodeSvgString } from '../services/receiptConfig';
+import { executeThermalPrint } from '../services/printService';
 
 export default function BarcodeStickerModal({ product, onClose }) {
   const [printCount, setPrintCount] = useState(1);
   const [labelSize, setLabelSize] = useState('50x25'); // '50x25' or '40x30'
+  const [isPrinting, setIsPrinting] = useState(false);
 
   if (!product) return null;
 
-  const handlePrintLabels = () => {
-    window.print();
-  };
-
   const barcodeValue = product.barcode || product.part_number.replace(/[^a-zA-Z0-9]/g, '');
+
+  const handlePrintLabels = async () => {
+    try {
+      setIsPrinting(true);
+      const is50x25 = labelSize === '50x25';
+      const widthMm = is50x25 ? 50 : 40;
+      const heightMm = is50x25 ? 25 : 30;
+
+      const barcodeSvg = getBarcodeSvgString(barcodeValue, {
+        width: 1.0,
+        height: 22,
+        fontSize: 7.5
+      });
+
+      const singleStickerHtml = `
+        <div style="
+          width: ${widthMm}mm;
+          height: ${heightMm}mm;
+          box-sizing: border-box;
+          padding: 1.5mm 2mm;
+          background: #ffffff;
+          color: #000000;
+          font-family: 'Courier New', Courier, monospace;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          text-align: center;
+          page-break-after: always;
+          margin: 0 auto;
+        ">
+          <div style="font-size: 8px; font-weight: 900; letter-spacing: 0.3px; border-bottom: 1px solid #000; padding-bottom: 1px;">
+            MADINA HONDA CENTRE
+          </div>
+
+          <div style="font-size: 7.5px; font-weight: 700; line-height: 1.1; margin: 1px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            ${product.name} (${product.model_compat || 'Honda'})
+          </div>
+
+          <div style="display: flex; justify-content: center; margin: 1px 0;">
+            ${barcodeSvg}
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 7.5px; font-weight: 700; border-top: 1px solid #000; padding-top: 1px;">
+            <span>${product.part_number}</span>
+            <span style="font-size: 8.5px; font-weight: 900;">PKR ${product.retail_price}</span>
+          </div>
+        </div>
+      `;
+
+      const stickersArray = Array.from({ length: printCount }, () => singleStickerHtml);
+      const allStickersHtml = `<div class="barcode-stickers-container">${stickersArray.join('')}</div>`;
+
+      await executeThermalPrint(allStickersHtml, widthMm);
+    } catch (err) {
+      alert('Print error: ' + err.message);
+    } finally {
+      setIsPrinting(false);
+    }
+  };
 
   return (
     <div className="modal-backdrop printing-active">
@@ -51,7 +109,8 @@ export default function BarcodeStickerModal({ product, onClose }) {
                 className="form-input"
                 value={printCount}
                 onChange={(e) => setPrintCount(Math.max(1, parseInt(e.target.value) || 1))}
-              />
+              >
+              </input>
             </div>
           </div>
 
@@ -63,7 +122,6 @@ export default function BarcodeStickerModal({ product, onClose }) {
 
             {/* Individual Sticker Card */}
             <div
-              className="printable-receipt-area"
               style={{
                 width: labelSize === '50x25' ? '190px' : '160px',
                 height: labelSize === '50x25' ? '100px' : '115px',
@@ -85,7 +143,7 @@ export default function BarcodeStickerModal({ product, onClose }) {
               </div>
 
               <div style={{ fontSize: '8.5px', fontWeight: '700', lineHeight: 1.1, margin: '2px 0', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                {product.name} ({product.model_compat})
+                {product.name} ({product.model_compat || 'Honda'})
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'center', margin: '1px 0' }}>
@@ -108,8 +166,12 @@ export default function BarcodeStickerModal({ product, onClose }) {
           <button onClick={onClose} className="btn btn-secondary">
             Cancel
           </button>
-          <button onClick={handlePrintLabels} className="btn btn-primary">
-            <Printer size={16} /> Print {printCount} Sticker{printCount > 1 ? 's' : ''}
+          <button
+            onClick={handlePrintLabels}
+            disabled={isPrinting}
+            className="btn btn-primary"
+          >
+            <Printer size={16} /> {isPrinting ? 'Spooling...' : `Print ${printCount} Sticker${printCount > 1 ? 's' : ''}`}
           </button>
         </div>
       </div>

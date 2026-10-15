@@ -1167,18 +1167,61 @@ body {
 /* ==========================================================================
    PRODUCTION THERMAL PRINT ENGINE (80mm & 58mm THERMAL RECEIPT & A4)
    Eliminates excessive whitespace, strips browser default margins,
-   and guarantees 100% visible print without blank pages.
+   and prevents Windows spooler crash ("Something went wrong when trying to print")
    ========================================================================== */
+#thermal-print-target {
+  display: none;
+}
+
 @page {
-  /* Zero margins so the receipt starts at the very top edge */
-  margin: 0mm !important;
-  /* Auto length so continuous thermal rolls cut immediately after content */
+  /* Strictly margin 0 and size auto for Windows thermal spoolers */
+  margin: 0 !important;
   size: auto;
 }
 
 @media print {
-  /* 1. Hide everything on the page by default */
-  html, body {
+  /* 1. THERMAL PRINT ENGINE: Active when body has .is-printing-thermal */
+  body.is-printing-thermal {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Completely eliminate the entire React application (#root) from the print tree */
+  body.is-printing-thermal #root {
+    display: none !important;
+  }
+
+  /* Only the clean thermal document is rendered in static flow starting at 0,0 */
+  body.is-printing-thermal #thermal-print-target {
+    display: block !important;
+    position: static !important;
+    float: none !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    visibility: visible !important;
+    overflow: visible !important;
+  }
+
+  body.is-printing-thermal #thermal-print-target * {
+    visibility: visible !important;
+    color: #000000 !important;
+    box-sizing: border-box !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 2. FALLBACK / BARCODE STICKER PRINT ENGINE: Active when body is NOT .is-printing-thermal */
+  body:not(.is-printing-thermal) html,
+  body:not(.is-printing-thermal) {
     margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
@@ -1187,72 +1230,44 @@ body {
     height: auto !important;
     min-height: auto !important;
     overflow: visible !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
   }
 
-  body * {
+  body:not(.is-printing-thermal) * {
     visibility: hidden !important;
   }
 
-  /* 2. Explicitly show ONLY the printable receipt area and all its children */
-  .printable-receipt-area,
-  .printable-receipt-area * {
+  body:not(.is-printing-thermal) .printable-receipt-area,
+  body:not(.is-printing-thermal) .printable-receipt-area * {
     visibility: visible !important;
   }
 
-  /* 3. Pin the printable receipt area directly to the top-left of the physical paper */
-  .printable-receipt-area {
-    position: fixed !important;
+  body:not(.is-printing-thermal) .printable-receipt-area {
+    position: absolute !important;
     left: 0 !important;
     top: 0 !important;
     margin: 0 !important;
-    padding: 1.5mm 2.5mm !important;
+    padding: 1mm !important;
     background: #ffffff !important;
     color: #000000 !important;
     box-sizing: border-box !important;
     border: none !important;
     border-radius: 0 !important;
     box-shadow: none !important;
-    z-index: 99999999 !important;
-    max-height: none !important;
     overflow: visible !important;
-    page-break-after: avoid !important;
-    page-break-inside: avoid !important;
     display: block !important;
   }
 
-  /* Standard 80mm Roll (printable width ~72mm - 74mm) */
   .paper-80mm {
     width: 72mm !important;
     max-width: 72mm !important;
   }
 
-  /* Compact 58mm Roll (printable width ~48mm) */
   .paper-58mm {
     width: 48mm !important;
     max-width: 48mm !important;
     font-size: 9.5px !important;
   }
 
-  /* Full Page A4 */
-  .paper-a4 {
-    width: 190mm !important;
-    max-width: 190mm !important;
-    padding: 8mm !important;
-  }
-
-  /* Force sharp black text and barcode lines */
-  .printable-receipt-area * {
-    color: #000000 !important;
-  }
-  .printable-receipt-area svg {
-    max-width: 100% !important;
-    height: auto !important;
-    display: block !important;
-  }
-
-  /* Explicitly remove buttons and screen-only elements */
   .no-print,
   button,
   .btn,
@@ -1414,3 +1429,98 @@ body {
   background: radial-gradient(circle, transparent, transparent 50%, #ffffff 50%, #ffffff 100%);
   background-size: 8px 6px;
 }
+
+/* ==========================================================================
+   DRAG-AND-DROP VISUAL RECEIPT DESIGNER STYLES
+   ========================================================================== */
+.block-builder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  max-height: calc(100vh - 280px);
+  padding-right: 4px;
+}
+
+.block-card {
+  background: var(--aronium-tile-bg);
+  border: 1px solid var(--aronium-border);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.block-card:hover {
+  border-color: rgba(225, 29, 72, 0.4);
+}
+
+.block-card.is-dragging {
+  opacity: 0.4;
+  border: 2px dashed var(--honda-red);
+  transform: scale(0.98);
+}
+
+.block-card.is-drag-over {
+  border: 2px solid #38bdf8;
+  background: rgba(56, 189, 248, 0.05);
+}
+
+.block-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid transparent;
+}
+
+.block-card-header.has-body {
+  border-bottom: 1px solid var(--aronium-border);
+}
+
+.block-drag-handle {
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.block-drag-handle:active {
+  cursor: grabbing;
+}
+
+.block-card-body {
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 0 0 8px 8px;
+  font-size: 11.5px;
+}
+
+.preset-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid var(--aronium-border);
+  background: var(--aronium-tile-bg);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.preset-chip:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+}
+
+.preset-chip.active {
+  background: rgba(225, 29, 72, 0.15);
+  border-color: var(--honda-red);
+  color: #fff;
+  font-weight: 700;
+}
+

@@ -1,348 +1,276 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Printer, Code2, Palette, FileText, Check, RotateCcw,
-  Eye, ZoomIn, ZoomOut, Save, Sparkles, Layers, ShieldCheck,
-  Tag, AlertCircle, HelpCircle, ArrowLeft
+  Printer, ArrowLeft, Save, RotateCcw, Check, Eye, EyeOff,
+  ChevronUp, ChevronDown, GripVertical, Sparkles, Sliders,
+  Building2, FileText, User, ShoppingBag, Wrench, Calculator,
+  ShieldCheck, MessageSquare, ZoomIn, ZoomOut, Zap,
+  CheckCircle2, Layers, AlertCircle, Info
 } from 'lucide-react';
-import BarcodeCanvas from '../components/BarcodeCanvas';
 import {
-  fetchPrintTemplates,
-  savePrintTemplate,
-  activateTemplate,
-  resetSystemDefaults,
-  fetchAllSettings
-} from '../services/settingsService';
-import { printThermalDocument } from '../services/printService';
+  DEFAULT_RECEIPT_CONFIG,
+  RECEIPT_PRESETS,
+  fetchReceiptConfig,
+  saveReceiptConfig,
+  generateReceiptHtml
+} from '../services/receiptConfig';
+import { executeThermalPrint } from '../services/printService';
+import { fetchAllSettings } from '../services/settingsService';
 
 export default function PrintScriptEditor({ onNavigateBack }) {
-  const [templates, setTemplates] = useState([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState('tpl_80mm_standard');
-  const [activeTab, setActiveTab] = useState('html'); // 'html', 'css', 'variables'
-  const [paperPreview, setPaperPreview] = useState('80mm'); // '80mm', '58mm', 'a4'
-  const [zoomLevel, setZoomLevel] = useState(100);
-  const [sampleDataType, setSampleDataType] = useState('workshop'); // 'workshop' or 'retail'
-  const [saveStatus, setSaveStatus] = useState('');
+  const [config, setConfig] = useState(DEFAULT_RECEIPT_CONFIG);
   const [systemSettings, setSystemSettings] = useState({});
+  const [selectedPreset, setSelectedPreset] = useState('standard_retail');
+  const [sampleDataType, setSampleDataType] = useState('workshop'); // 'workshop' or 'retail'
+  const [zoomLevel, setZoomLevel] = useState(100);
+  const [saveStatus, setSaveStatus] = useState('');
+  const [expandedBlockId, setExpandedBlockId] = useState('header');
 
-  // Current active draft
-  const [draftName, setDraftName] = useState('');
-  const [draftPaperSize, setDraftPaperSize] = useState('80mm');
-  const [draftWidthMm, setDraftWidthMm] = useState(72);
-  const [draftHtml, setDraftHtml] = useState('');
-  const [draftCss, setDraftCss] = useState('');
+  // Drag and Drop state
+  const [draggedIdx, setDraggedIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
 
-  const previewFrameRef = useRef(null);
-
-  // Load templates & settings on mount
+  // Load config & system settings on mount
   useEffect(() => {
-    loadTemplates();
-    loadSettings();
+    loadData();
   }, []);
 
-  const loadSettings = async () => {
-    const s = await fetchAllSettings();
-    setSystemSettings(s);
-  };
-
-  const loadTemplates = async () => {
+  const loadData = async () => {
     try {
-      const data = await fetchPrintTemplates();
-      setTemplates(data.templates || []);
-      const active = data.active || data.templates[0];
-      if (active) {
-        selectTemplate(active);
-      }
+      const [cfg, s] = await Promise.all([
+        fetchReceiptConfig(),
+        fetchAllSettings()
+      ]);
+      setConfig(cfg || DEFAULT_RECEIPT_CONFIG);
+      setSystemSettings(s || {});
     } catch (err) {
-      console.error(err);
+      console.error('Error initializing PrintScriptEditor:', err);
     }
-  };
-
-  const selectTemplate = (tpl) => {
-    setSelectedTemplateId(tpl.id);
-    setDraftName(tpl.name);
-    setDraftPaperSize(tpl.paper_size || '80mm');
-    setDraftWidthMm(tpl.receipt_width_mm || (tpl.paper_size === '58mm' ? 48 : 72));
-    setDraftHtml(tpl.html_template);
-    setDraftCss(tpl.custom_css);
-    setPaperPreview(tpl.paper_size || '80mm');
-  };
-
-  const handleSelectTemplateChange = (id) => {
-    const tpl = templates.find(t => t.id === id);
-    if (tpl) selectTemplate(tpl);
   };
 
   // Sample data for live preview
   const sampleInvoice = useMemo(() => {
     if (sampleDataType === 'workshop') {
       return {
-        store_name: systemSettings.store_name || 'MADINA HONDA CENTRE',
-        store_tagline: systemSettings.store_tagline || 'AUTHORIZED 3S SALES, SERVICE & SPARE PARTS',
-        store_address: systemSettings.store_address || 'Circular Road, Near Bus Stand',
-        store_phone: systemSettings.store_phone || '0300-1234567',
-        store_ntn: systemSettings.store_ntn || 'NTN-7860123-4',
-        invoice_no: 'INV-2026-0042',
-        invoice_date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        sale_type: 'WORKSHOP SERVICE',
-        payment_method: 'CASH',
-        customer_name: 'Chaudhry Nadeem',
-        customer_phone: '0300-9876543',
-        bike_model: 'Honda CG125 Special Edition',
-        reg_number: 'LEM-24-9912',
-        chassis_number: 'JC19E-881920',
-        mechanic_name: 'Ustad Tariq (Senior)',
+        sale: {
+          invoice_number: 'INV-2026-0042',
+          created_at: new Date().toISOString(),
+          stream: 'inhouse',
+          payment_method: 'cash',
+          customer_name: 'Chaudhry Nadeem',
+          subtotal: 1980,
+          discount: 80,
+          grand_total: 1900,
+          cash_tendered: 2000,
+          change_returned: 100,
+        },
         items: [
-          { name: 'Honda 4T 20W-50 Engine Oil (0.7L)', code: '08232-2MA-K1L', qty: 1, rate: 850, total: 850 },
-          { name: 'Spark Plug C7HSA (Genuine OEM)', code: '98056-57718', qty: 1, rate: 340, total: 340 },
-          { name: 'Clutch Wire Cable (Atlas Genuine)', code: '54011-098-000', qty: 1, rate: 290, total: 290 }
+          { name: 'Honda 4T 20W-50 Engine Oil (0.7L)', part_number: '08232-2MA-K1L', quantity: 1, unit_price: 850, total_price: 850 },
+          { name: 'Spark Plug C7HSA (Genuine OEM)', part_number: '98056-57718', quantity: 1, unit_price: 340, total_price: 340 },
+          { name: 'Clutch Wire Cable (Atlas Genuine)', part_number: '54011-098-000', quantity: 1, unit_price: 290, total_price: 290 }
         ],
-        labor_title: 'Full Tuning & Tappet Adjustment',
-        labor_amount: 500,
-        subtotal: 1980,
-        discount: 80,
-        grand_total: 1900,
-        cash_paid: 2000,
-        change_due: 100,
-        gate_pass_code: 'GP-9912-88',
-        footer_message: systemSettings.receipt_welcome || 'Thank you for choosing Madina Honda Centre!',
-        return_policy: systemSettings.receipt_disclaimer || 'Atlas Honda Genuine Parts Guaranteed | No Return Without Receipt'
+        jobDetails: {
+          customer_name: 'Chaudhry Nadeem',
+          vehicle_model: 'Honda CG125 Special Edition',
+          reg_number: 'LEM-24-9912',
+          chassis_number: 'JC19E-881920',
+          mechanic_name: 'Ustad Tariq (Senior)',
+          work_type: 'Full Tuning & Tappet Adjustment',
+          dynamic_labor_amount: 500,
+          gate_pass_code: 'GP-9912-88'
+        }
       };
     } else {
       return {
-        store_name: systemSettings.store_name || 'MADINA HONDA CENTRE',
-        store_tagline: systemSettings.store_tagline || 'AUTHORIZED 3S SALES, SERVICE & SPARE PARTS',
-        store_address: systemSettings.store_address || 'Circular Road, Near Bus Stand',
-        store_phone: systemSettings.store_phone || '0300-1234567',
-        store_ntn: systemSettings.store_ntn || 'NTN-7860123-4',
-        invoice_no: 'INV-2026-0098',
-        invoice_date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        sale_type: 'COUNTER RETAIL',
-        payment_method: 'CASH',
-        customer_name: 'Walk-in Retail Buyer',
-        customer_phone: 'N/A',
-        bike_model: 'Honda CD70',
-        reg_number: 'N/A',
-        chassis_number: '',
-        mechanic_name: '',
+        sale: {
+          invoice_number: 'INV-2026-0098',
+          created_at: new Date().toISOString(),
+          stream: 'retail',
+          payment_method: 'cash',
+          customer_name: 'Walk-in Retail Buyer',
+          subtotal: 1300,
+          discount: 0,
+          grand_total: 1300,
+          cash_tendered: 1500,
+          change_returned: 200,
+        },
         items: [
-          { name: 'Air Filter Element CD70 (Atlas Genuine)', code: '17211-198-000', qty: 1, rate: 380, total: 380 },
-          { name: 'Brake Shoe Set Front (Atlas Honda)', code: '06430-KRF-B90', qty: 2, rate: 460, total: 920 }
+          { name: 'Air Filter Element CD70 (Atlas Genuine)', part_number: '17211-198-000', quantity: 1, unit_price: 380, total_price: 380 },
+          { name: 'Brake Shoe Set Front (Atlas Honda)', part_number: '06430-KRF-B90', quantity: 2, unit_price: 460, total_price: 920 }
         ],
-        labor_title: '',
-        labor_amount: 0,
-        subtotal: 1300,
-        discount: 0,
-        grand_total: 1300,
-        cash_paid: 1500,
-        change_due: 200,
-        gate_pass_code: '',
-        footer_message: systemSettings.receipt_welcome || 'Thank you for choosing Madina Honda Centre!',
-        return_policy: systemSettings.receipt_disclaimer || 'Atlas Honda Genuine Parts Guaranteed | No Return Without Receipt'
+        jobDetails: null
       };
     }
-  }, [sampleDataType, systemSettings]);
+  }, [sampleDataType]);
 
-  // Replace placeholders in HTML template with sample data
-  const renderedHtml = useMemo(() => {
-    let html = draftHtml || '';
-    if (!html) return '<div style="padding:10px;text-align:center;">Empty Template</div>';
+  // Live rendered receipt HTML
+  const receiptHtml = useMemo(() => {
+    return generateReceiptHtml(config, sampleInvoice, systemSettings);
+  }, [config, sampleInvoice, systemSettings]);
 
-    // Replace basic scalars
-    html = html.replace(/\{\{store_name\}\}/g, sampleInvoice.store_name);
-    html = html.replace(/\{\{store_tagline\}\}/g, sampleInvoice.store_tagline);
-    html = html.replace(/\{\{store_address\}\}/g, sampleInvoice.store_address);
-    html = html.replace(/\{\{store_phone\}\}/g, sampleInvoice.store_phone);
-    html = html.replace(/\{\{store_ntn\}\}/g, sampleInvoice.store_ntn);
-    html = html.replace(/\{\{invoice_no\}\}/g, sampleInvoice.invoice_no);
-    html = html.replace(/\{\{invoice_date\}\}/g, sampleInvoice.invoice_date);
-    html = html.replace(/\{\{sale_type\}\}/g, sampleInvoice.sale_type);
-    html = html.replace(/\{\{payment_method\}\}/g, sampleInvoice.payment_method);
-    html = html.replace(/\{\{subtotal\}\}/g, sampleInvoice.subtotal);
-    html = html.replace(/\{\{discount\}\}/g, sampleInvoice.discount);
-    html = html.replace(/\{\{grand_total\}\}/g, sampleInvoice.grand_total);
-    html = html.replace(/\{\{cash_paid\}\}/g, sampleInvoice.cash_paid);
-    html = html.replace(/\{\{change_due\}\}/g, sampleInvoice.change_due);
-    html = html.replace(/\{\{footer_message\}\}/g, sampleInvoice.footer_message);
-    html = html.replace(/\{\{return_policy\}\}/g, sampleInvoice.return_policy);
-
-    // Customer & Vehicle Block
-    if (sampleInvoice.customer_name || sampleInvoice.bike_model) {
-      const custBlock = `
-        <div class="customer-info-box">
-          <div><strong>Customer:</strong> ${sampleInvoice.customer_name} ${sampleInvoice.customer_phone !== 'N/A' ? `(${sampleInvoice.customer_phone})` : ''}</div>
-          ${sampleInvoice.bike_model ? `<div><strong>Bike:</strong> ${sampleInvoice.bike_model} | <strong>Reg:</strong> ${sampleInvoice.reg_number}</div>` : ''}
-          ${sampleInvoice.mechanic_name ? `<div><strong>Mechanic:</strong> ${sampleInvoice.mechanic_name}</div>` : ''}
-        </div>
-      `;
-      html = html.replace(/\{\{customer_vehicle_block\}\}/g, custBlock);
-    } else {
-      html = html.replace(/\{\{customer_vehicle_block\}\}/g, '');
+  // Estimated physical height of receipt in millimeters
+  const estimatedHeightMm = useMemo(() => {
+    let mm = 6; // padding
+    const blocks = config.blocks || [];
+    for (const b of blocks) {
+      if (!b.visible) continue;
+      if (b.id === 'header') {
+        mm += 6;
+        if (b.show_tagline) mm += 3.5;
+        if (b.show_address) mm += 3.5;
+        if (b.show_phone) mm += 3.5;
+        if (b.show_ntn) mm += 3;
+      } else if (b.id === 'meta') {
+        mm += 7;
+      } else if (b.id === 'customer') {
+        if (sampleInvoice.sale.customer_name || sampleInvoice.jobDetails) {
+          mm += 6;
+          if (b.show_bike && sampleInvoice.jobDetails) mm += 3.5;
+          if (b.show_mechanic && sampleInvoice.jobDetails) mm += 3;
+          if (b.show_chassis && sampleInvoice.jobDetails) mm += 3;
+        }
+      } else if (b.id === 'items') {
+        mm += 5; // table header
+        const count = sampleInvoice.items.length;
+        mm += count * (b.show_part_numbers ? 6.5 : 4.5);
+      } else if (b.id === 'labor') {
+        if (sampleInvoice.jobDetails && sampleInvoice.jobDetails.dynamic_labor_amount > 0) mm += 4.5;
+      } else if (b.id === 'totals') {
+        mm += 6;
+        if (b.show_subtotal) mm += 3.5;
+        if (b.show_discount) mm += 3.5;
+        if (b.show_cash_paid) mm += 3.5;
+      } else if (b.id === 'gate_pass') {
+        if (sampleInvoice.jobDetails && sampleInvoice.jobDetails.gate_pass_code) {
+          mm += (b.barcode_height || 26) * 0.35 + 10;
+        }
+      } else if (b.id === 'footer') {
+        if (b.show_greeting) mm += 3.5;
+        if (b.show_disclaimer) mm += 3.5;
+      }
     }
+    return Math.round(mm);
+  }, [config, sampleInvoice]);
 
-    // Items rows
-    const itemsHtml = sampleInvoice.items.map(it => `
-      <tr>
-        <td>
-          <div class="item-title">${it.name}</div>
-          ${it.code ? `<div class="item-code">${it.code}</div>` : ''}
-        </td>
-        <td style="text-align: center;">${it.qty}</td>
-        ${draftPaperSize === '58mm' ? '' : `<td style="text-align: right;">${it.rate}</td>`}
-        <td style="text-align: right; font-weight: 700;">${it.total}</td>
-      </tr>
-    `).join('');
-    html = html.replace(/\{\{items_rows\}\}/g, itemsHtml);
-
-    // Labor row
-    if (sampleInvoice.labor_amount > 0) {
-      const laborHtml = `
-        <tr style="font-style: italic;">
-          <td>
-            <div class="item-title">Labor &amp; Service Charges</div>
-            <div class="item-code">${sampleInvoice.labor_title}</div>
-          </td>
-          <td style="text-align: center;">1</td>
-          ${draftPaperSize === '58mm' ? '' : `<td style="text-align: right;">${sampleInvoice.labor_amount}</td>`}
-          <td style="text-align: right; font-weight: 700;">${sampleInvoice.labor_amount}</td>
-        </tr>
-      `;
-      html = html.replace(/\{\{labor_row\}\}/g, laborHtml);
-    } else {
-      html = html.replace(/\{\{labor_row\}\}/g, '');
+  // 1-Click Preset Selection
+  const handleSelectPreset = (key) => {
+    const p = RECEIPT_PRESETS[key];
+    if (p) {
+      setConfig({ ...p.config });
+      setSelectedPreset(key);
     }
-
-    // Discount block
-    if (sampleInvoice.discount > 0) {
-      html = html.replace(/\{\{discount_block\}\}/g, `
-        <div class="ticket-row" style="color: #b91c1c;">
-          <span>Discount:</span>
-          <span>- PKR ${sampleInvoice.discount}</span>
-        </div>
-      `);
-    } else {
-      html = html.replace(/\{\{discount_block\}\}/g, '');
-    }
-
-    // Cash tendered block
-    if (sampleInvoice.payment_method === 'CASH') {
-      html = html.replace(/\{\{cash_tendered_block\}\}/g, `
-        <div class="ticket-row" style="font-size: 9px; margin-top: 3px;">
-          <span>Cash Paid: PKR ${sampleInvoice.cash_paid}</span>
-          <span>Change: PKR ${sampleInvoice.change_due}</span>
-        </div>
-      `);
-    } else {
-      html = html.replace(/\{\{cash_tendered_block\}\}/g, '');
-    }
-
-    // Gate Pass Block
-    if (sampleInvoice.gate_pass_code) {
-      const gatePassHtml = `
-        <div class="gate-pass-box">
-          <div class="gate-pass-badge">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block; vertical-align:middle; margin-right:2px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-            OFFICIAL BIKE RELEASE GATE PASS
-          </div>
-          <div style="font-size: 10px; font-weight: 800; margin: 3px 0;">
-            VEHICLE REG: ${sampleInvoice.reg_number}
-          </div>
-          <div style="font-size: 8px; color: #333;">Security: Scan/Verify Code before exiting</div>
-          <div style="margin: 4px 0; font-family: monospace; font-weight: 900; letter-spacing: 2px; font-size: 12px; border: 1px solid #000; display: inline-block; padding: 2px 8px; background: #fafafa;">
-            *${sampleInvoice.gate_pass_code}*
-          </div>
-        </div>
-      `;
-      html = html.replace(/\{\{gate_pass_block\}\}/g, gatePassHtml);
-    } else {
-      html = html.replace(/\{\{gate_pass_block\}\}/g, '');
-    }
-
-    return html;
-  }, [draftHtml, sampleInvoice, draftPaperSize]);
-
-  // Insert a variable tag at the cursor
-  const handleInsertTag = (tag) => {
-    setDraftHtml(prev => prev + tag);
   };
 
-  // Save current template
-  const handleSaveTemplate = async () => {
+  // Drag and Drop Handlers
+  const handleDragStart = (e, idx) => {
+    setDraggedIdx(idx);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, idx) => {
+    e.preventDefault();
+    if (dragOverIdx !== idx) {
+      setDragOverIdx(idx);
+    }
+  };
+
+  const handleDrop = (e, targetIdx) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === targetIdx) {
+      setDraggedIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+    const updated = [...config.blocks];
+    const [moved] = updated.splice(draggedIdx, 1);
+    updated.splice(targetIdx, 0, moved);
+    setConfig(prev => ({ ...prev, blocks: updated }));
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+    setSelectedPreset('custom');
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
+
+  // Button Reorder (Move Up / Down)
+  const handleMoveBlock = (idx, step) => {
+    const targetIdx = idx + step;
+    if (targetIdx < 0 || targetIdx >= config.blocks.length) return;
+    const updated = [...config.blocks];
+    const [moved] = updated.splice(idx, 1);
+    updated.splice(targetIdx, 0, moved);
+    setConfig(prev => ({ ...prev, blocks: updated }));
+    setSelectedPreset('custom');
+  };
+
+  // Toggle block visibility
+  const handleToggleBlockVisibility = (blockId) => {
+    setConfig(prev => ({
+      ...prev,
+      blocks: prev.blocks.map(b => b.id === blockId ? { ...b, visible: !b.visible } : b)
+    }));
+    setSelectedPreset('custom');
+  };
+
+  // Update specific block property
+  const handleUpdateBlockProp = (blockId, prop, value) => {
+    setConfig(prev => ({
+      ...prev,
+      blocks: prev.blocks.map(b => b.id === blockId ? { ...b, [prop]: value } : b)
+    }));
+    setSelectedPreset('custom');
+  };
+
+  // Real Print Test using bulletproof isolated portal
+  const handleTestPrint = async () => {
     try {
-      setSaveStatus('Saving...');
-      await savePrintTemplate({
-        id: selectedTemplateId,
-        name: draftName,
-        paper_size: draftPaperSize,
-        receipt_width_mm: Number(draftWidthMm) || 72,
-        html_template: draftHtml,
-        custom_css: draftCss,
-        is_active: 1
-      });
+      await executeThermalPrint(receiptHtml, config.width_mm || 72);
+    } catch (err) {
+      alert('Print error: ' + err.message);
+    }
+  };
+
+  // Save configuration
+  const handleSave = async () => {
+    try {
+      setSaveStatus('Saving layout...');
+      await saveReceiptConfig(config);
       setSaveStatus('Saved successfully!');
       setTimeout(() => setSaveStatus(''), 3000);
-      loadTemplates();
     } catch (err) {
-      alert('Save error: ' + err.message);
+      alert('Failed to save receipt layout: ' + err.message);
       setSaveStatus('');
     }
   };
 
-  // Set active template
-  const handleActivate = async () => {
-    try {
-      await activateTemplate(selectedTemplateId);
-      alert(`"${draftName}" is now the active print template for all POS receipts.`);
-      loadTemplates();
-    } catch (err) {
-      alert(err.message);
+  // Reset to default
+  const handleReset = () => {
+    if (window.confirm('Reset receipt layout back to Standard Factory Retail preset?')) {
+      handleSelectPreset('standard_retail');
     }
   };
 
-  // Reset to factory defaults
-  const handleResetDefaults = async () => {
-    if (!window.confirm('Reset all print scripts and system templates to original factory presets? Custom changes will be restored.')) {
-      return;
-    }
-    try {
-      await resetSystemDefaults();
-      alert('Restored factory default print templates!');
-      loadTemplates();
-    } catch (err) {
-      alert(err.message);
+  // Icon mapping
+  const getBlockIcon = (id) => {
+    switch (id) {
+      case 'header': return <Building2 size={16} color="#38bdf8" />;
+      case 'meta': return <FileText size={16} color="#fbbf24" />;
+      case 'customer': return <User size={16} color="#34d399" />;
+      case 'items': return <ShoppingBag size={16} color="#f472b6" />;
+      case 'labor': return <Wrench size={16} color="#a78bfa" />;
+      case 'totals': return <Calculator size={16} color="#22c55e" />;
+      case 'gate_pass': return <ShieldCheck size={16} color="#f87171" />;
+      case 'footer': return <MessageSquare size={16} color="#94a3b8" />;
+      default: return <Layers size={16} color="var(--honda-red)" />;
     }
   };
-
-  // Real Print Test using direct native browser print with zero margins
-  const handleTestPrint = () => {
-    window.print();
-  };
-
-  const placeholders = [
-    { tag: '{{store_name}}', desc: 'Shop Name (Madina Honda Centre)' },
-    { tag: '{{store_tagline}}', desc: '3S Dealership Subtitle' },
-    { tag: '{{store_address}}', desc: 'Store Location Address' },
-    { tag: '{{store_phone}}', desc: 'Shop Mobile / Tel' },
-    { tag: '{{store_ntn}}', desc: 'Tax / NTN Number' },
-    { tag: '{{invoice_no}}', desc: 'Invoice Number' },
-    { tag: '{{invoice_date}}', desc: 'Formatted Date & Time' },
-    { tag: '{{sale_type}}', desc: 'Counter / Workshop / Wholesale' },
-    { tag: '{{payment_method}}', desc: 'Cash / JazzCash / Khata' },
-    { tag: '{{customer_vehicle_block}}', desc: 'Customer, Bike Model, Reg #' },
-    { tag: '{{items_rows}}', desc: 'Dynamic Line Items Table' },
-    { tag: '{{labor_row}}', desc: 'Dynamic Workshop Labor Charge' },
-    { tag: '{{subtotal}}', desc: 'Raw Items Subtotal' },
-    { tag: '{{discount_block}}', desc: 'Rupees / % Discount Line' },
-    { tag: '{{grand_total}}', desc: 'Final Payable Amount' },
-    { tag: '{{cash_tendered_block}}', desc: 'Cash Tendered & Change' },
-    { tag: '{{gate_pass_block}}', desc: 'Official Barcoded Gate Pass' },
-    { tag: '{{footer_message}}', desc: 'Greeting / Thank You Message' },
-    { tag: '{{return_policy}}', desc: 'Receipt Terms & Conditions' }
-  ];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       
-      {/* Top Action Bar */}
+      {/* TOP ACTION BAR */}
       <div style={{
         background: 'var(--aronium-tile-bg)',
         border: '1px solid var(--aronium-border)',
@@ -360,298 +288,605 @@ export default function PrintScriptEditor({ onNavigateBack }) {
               <ArrowLeft size={14} /> Back
             </button>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{ background: 'var(--honda-red)', color: '#fff', padding: '6px', borderRadius: '6px' }}>
-              <Code2 size={20} />
+              <Sliders size={20} />
             </div>
             <div>
               <h2 style={{ fontSize: '16px', fontWeight: '800', margin: 0, color: 'var(--text-main)' }}>
-                Thermal Print Script &amp; Template Editor
+                Visual Receipt Designer &amp; Thermal Script Builder
               </h2>
               <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>
-                Live HTML &amp; CSS thermal receipt designer with real-time zero-margin roll preview
+                100% Visual Drag &amp; Drop — Reorder sections, eliminate paper waste, zero code required.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Template Selector & Action Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <select
-            className="form-select"
-            value={selectedTemplateId}
-            onChange={(e) => handleSelectTemplateChange(e.target.value)}
-            style={{ fontSize: '12px', padding: '6px 10px', maxWidth: '240px' }}
-          >
-            {templates.map(t => (
-              <option key={t.id} value={t.id}>
-                {t.name} ({t.paper_size}) {t.is_active === 1 ? '★ Active' : ''}
-              </option>
-            ))}
-          </select>
-
-          <button onClick={handleTestPrint} className="btn btn-secondary btn-sm" title="Print real test bill on thermal printer">
-            <Printer size={14} /> Print Test Slip
-          </button>
-
-          <button onClick={handleActivate} className="btn btn-outline btn-sm" title="Set this template as default for all POS prints">
-            <Check size={14} /> Set as Active
-          </button>
-
-          <button onClick={handleResetDefaults} className="btn btn-outline btn-sm" title="Reset to factory preset">
+        {/* Top Buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <button onClick={handleReset} className="btn btn-outline btn-sm" title="Restore standard defaults">
             <RotateCcw size={14} /> Reset
           </button>
+          
+          <button
+            onClick={handleTestPrint}
+            className="btn btn-secondary btn-sm"
+            style={{ gap: '6px' }}
+            title="Direct print to thermal printer using isolated zero-margin portal"
+          >
+            <Printer size={15} color="var(--honda-red)" /> Print Test Slip ({config.paper_size})
+          </button>
 
-          <button onClick={handleSaveTemplate} className="btn btn-primary btn-sm" style={{ gap: '6px' }}>
-            <Save size={14} /> {saveStatus || 'Save Print Script'}
+          <button onClick={handleSave} className="btn btn-primary btn-sm" style={{ gap: '6px' }}>
+            <Save size={14} /> {saveStatus || 'Save Layout for POS'}
           </button>
         </div>
       </div>
 
-      {/* Main Two-Column Layout */}
+      {/* QUICK PRESETS SELECTOR */}
+      <div style={{
+        background: 'var(--aronium-tile-bg)',
+        border: '1px solid var(--aronium-border)',
+        borderRadius: '8px',
+        padding: '10px 14px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        flexWrap: 'wrap'
+      }}>
+        <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <Sparkles size={14} color="#fbbf24" /> Instant Presets:
+        </span>
+
+        {Object.entries(RECEIPT_PRESETS).map(([k, p]) => (
+          <button
+            key={k}
+            onClick={() => handleSelectPreset(k)}
+            className={`preset-chip ${selectedPreset === k ? 'active' : ''}`}
+            title={p.desc}
+          >
+            {p.name}
+          </button>
+        ))}
+      </div>
+
+      {/* TWO-COLUMN DESIGNER LAYOUT */}
       <div className="print-editor-container">
 
-        {/* LEFT COLUMN: Code Editor Tabs */}
-        <div className="print-editor-pane" style={{ padding: '16px' }}>
+        {/* LEFT COLUMN: Visual Drag & Drop Block Builder */}
+        <div className="print-editor-pane" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
-          {/* Template Meta Inputs */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+          {/* Paper Roll & Typography Global Options */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid var(--aronium-border)',
+            borderRadius: '6px',
+            padding: '10px 12px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+            gap: '10px'
+          }}>
             <div>
-              <label className="form-label" style={{ fontSize: '11px' }}>Template Name</label>
-              <input
-                type="text"
-                className="form-input"
-                style={{ fontSize: '12px', padding: '6px 8px' }}
-                value={draftName}
-                onChange={(e) => setDraftName(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="form-label" style={{ fontSize: '11px' }}>Paper Size</label>
+              <label className="form-label" style={{ fontSize: '10.5px' }}>Paper Roll Size</label>
               <select
                 className="form-select"
-                style={{ fontSize: '12px', padding: '6px 8px' }}
-                value={draftPaperSize}
+                style={{ fontSize: '11px', padding: '4px 6px' }}
+                value={config.paper_size}
                 onChange={(e) => {
-                  setDraftPaperSize(e.target.value);
-                  setPaperPreview(e.target.value);
-                  if (e.target.value === '58mm') setDraftWidthMm(48);
-                  else if (e.target.value === '80mm') setDraftWidthMm(72);
-                  else setDraftWidthMm(190);
+                  const size = e.target.value;
+                  setConfig(prev => ({
+                    ...prev,
+                    paper_size: size,
+                    width_mm: size === '58mm' ? 48 : 72
+                  }));
+                  setSelectedPreset('custom');
                 }}
               >
                 <option value="80mm">80mm Roll (Standard POS)</option>
                 <option value="58mm">58mm Roll (Mini POS)</option>
-                <option value="a4">A4 Full Page</option>
               </select>
             </div>
+
             <div>
-              <label className="form-label" style={{ fontSize: '11px' }}>Printable Width (mm)</label>
+              <label className="form-label" style={{ fontSize: '10.5px' }}>Printable Width (mm)</label>
               <input
                 type="number"
                 min="40"
-                max="210"
+                max="80"
                 className="form-input"
-                style={{ fontSize: '12px', padding: '6px 8px' }}
-                value={draftWidthMm}
-                onChange={(e) => setDraftWidthMm(e.target.value)}
+                style={{ fontSize: '11px', padding: '4px 6px' }}
+                value={config.width_mm}
+                onChange={(e) => {
+                  setConfig(prev => ({ ...prev, width_mm: Number(e.target.value) || 72 }));
+                  setSelectedPreset('custom');
+                }}
               />
+            </div>
+
+            <div>
+              <label className="form-label" style={{ fontSize: '10.5px' }}>Font Size</label>
+              <select
+                className="form-select"
+                style={{ fontSize: '11px', padding: '4px 6px' }}
+                value={config.font_size}
+                onChange={(e) => {
+                  setConfig(prev => ({ ...prev, font_size: e.target.value }));
+                  setSelectedPreset('custom');
+                }}
+              >
+                <option value="9px">9px (Ultra Compact)</option>
+                <option value="9.5px">9.5px (Compact)</option>
+                <option value="10.5px">10.5px (Standard)</option>
+                <option value="11.5px">11.5px (Large)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="form-label" style={{ fontSize: '10.5px' }}>Divider Style</label>
+              <select
+                className="form-select"
+                style={{ fontSize: '11px', padding: '4px 6px' }}
+                value={config.divider_style}
+                onChange={(e) => {
+                  setConfig(prev => ({ ...prev, divider_style: e.target.value }));
+                  setSelectedPreset('custom');
+                }}
+              >
+                <option value="dashed">Dashed (- - -)</option>
+                <option value="dotted">Dotted (. . .)</option>
+                <option value="solid">Solid (——)</option>
+                <option value="none">None (Zero Lines)</option>
+              </select>
             </div>
           </div>
 
-          {/* Editor Mode Tabs */}
-          <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--aronium-border)', paddingBottom: '8px', marginBottom: '12px' }}>
-            <button
-              onClick={() => setActiveTab('html')}
-              className={`btn btn-sm ${activeTab === 'html' ? 'btn-primary' : 'btn-outline'}`}
-              style={{ fontSize: '12px' }}
-            >
-              <Code2 size={13} /> HTML Template Structure
-            </button>
-            <button
-              onClick={() => setActiveTab('css')}
-              className={`btn btn-sm ${activeTab === 'css' ? 'btn-primary' : 'btn-outline'}`}
-              style={{ fontSize: '12px' }}
-            >
-              <Palette size={13} /> Custom CSS Stylesheet
-            </button>
-            <button
-              onClick={() => setActiveTab('variables')}
-              className={`btn btn-sm ${activeTab === 'variables' ? 'btn-primary' : 'btn-outline'}`}
-              style={{ fontSize: '12px' }}
-            >
-              <Tag size={13} /> Dynamic Placeholders ({placeholders.length})
-            </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>
+              Receipt Layout Blocks (Drag ⠿ to Reorder):
+            </span>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              Click block to expand settings
+            </span>
           </div>
 
-          {/* TAB 1: HTML TEMPLATE */}
-          {activeTab === 'html' && (
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  Enter HTML tags and curly-brace variables. Click any tag below to insert:
-                </span>
-              </div>
+          {/* DRAGGABLE BLOCKS LIST */}
+          <div className="block-builder-list">
+            {(config.blocks || []).map((b, idx) => {
+              const isExpanded = expandedBlockId === b.id;
+              const isDragging = draggedIdx === idx;
+              const isDragOver = dragOverIdx === idx;
 
-              {/* Quick Tag Insert Strip */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', maxHeight: '70px', overflowY: 'auto', padding: '4px 0' }}>
-                {placeholders.slice(0, 10).map(p => (
-                  <span
-                    key={p.tag}
-                    className="placeholder-tag"
-                    onClick={() => handleInsertTag(p.tag)}
-                    title={`Click to append: ${p.desc}`}
-                  >
-                    + {p.tag}
-                  </span>
-                ))}
-              </div>
+              return (
+                <div
+                  key={b.id}
+                  className={`block-card ${isDragging ? 'is-dragging' : ''} ${isDragOver ? 'is-drag-over' : ''}`}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, idx)}
+                  onDragOver={(e) => handleDragOver(e, idx)}
+                  onDrop={(e) => handleDrop(e, idx)}
+                  onDragEnd={handleDragEnd}
+                >
+                  {/* Card Header Bar */}
+                  <div className={`block-card-header ${isExpanded ? 'has-body' : ''}`}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div
+                        className="block-drag-handle"
+                        title="Drag up or down to reorder"
+                      >
+                        <GripVertical size={16} />
+                      </div>
 
-              <textarea
-                className="code-editor-area"
-                value={draftHtml}
-                onChange={(e) => setDraftHtml(e.target.value)}
-                rows={16}
-                spellCheck={false}
-              />
-            </div>
-          )}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleBlockVisibility(b.id)}
+                        className="btn btn-sm"
+                        style={{
+                          background: b.visible ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                          color: b.visible ? '#22c55e' : '#f87171',
+                          border: 'none',
+                          padding: '4px 6px',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                        title={b.visible ? 'Visible on slip (Click to hide)' : 'Hidden from slip (Click to show)'}
+                      >
+                        {b.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+                      </button>
 
-          {/* TAB 2: CUSTOM CSS */}
-          {activeTab === 'css' && (
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: '8px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                Target classes: <code>.thermal-ticket</code>, <code>.ticket-header</code>, <code>.items-table</code>, <code>.grand-total-row</code>, <code>.gate-pass-box</code>
-              </div>
-              <textarea
-                className="code-editor-area"
-                value={draftCss}
-                onChange={(e) => setDraftCss(e.target.value)}
-                rows={18}
-                spellCheck={false}
-              />
-            </div>
-          )}
-
-          {/* TAB 3: PLACEHOLDERS REFERENCE */}
-          {activeTab === 'variables' && (
-            <div style={{ overflowY: 'auto', flex: 1 }}>
-              <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginBottom: '12px' }}>
-                Click any placeholder variable below to insert it directly into your HTML template:
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '8px' }}>
-                {placeholders.map(p => (
-                  <div
-                    key={p.tag}
-                    onClick={() => {
-                      handleInsertTag(p.tag);
-                      setActiveTab('html');
-                    }}
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.04)',
-                      border: '1px solid var(--aronium-border)',
-                      borderRadius: '6px',
-                      padding: '8px 10px',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--honda-red)'}
-                    onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--aronium-border)'}
-                  >
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: '700', color: '#fb7185' }}>
-                      {p.tag}
+                      <div
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                        onClick={() => setExpandedBlockId(isExpanded ? null : b.id)}
+                      >
+                        {getBlockIcon(b.id)}
+                        <span style={{
+                          fontSize: '12.5px',
+                          fontWeight: '700',
+                          color: b.visible ? 'var(--text-main)' : 'var(--text-dim)',
+                          textDecoration: b.visible ? 'none' : 'line-through'
+                        }}>
+                          {b.name}
+                        </span>
+                      </div>
                     </div>
-                    <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {p.desc}
+
+                    {/* Up / Down Controls */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleMoveBlock(idx, -1)}
+                        disabled={idx === 0}
+                        className="btn btn-outline btn-sm"
+                        style={{ padding: '2px 5px', opacity: idx === 0 ? 0.3 : 1 }}
+                        title="Move Up"
+                      >
+                        <ChevronUp size={13} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleMoveBlock(idx, 1)}
+                        disabled={idx === config.blocks.length - 1}
+                        className="btn btn-outline btn-sm"
+                        style={{ padding: '2px 5px', opacity: idx === config.blocks.length - 1 ? 0.3 : 1 }}
+                        title="Move Down"
+                      >
+                        <ChevronDown size={13} />
+                      </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
 
-          <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--aronium-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-              ⚡ Changes reflect in real time on the live receipt preview to the right.
-            </span>
+                  {/* Expandable Visual Block Settings */}
+                  {isExpanded && (
+                    <div className="block-card-body">
+                      {/* 1. Header Block Settings */}
+                      {b.id === 'header' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div>
+                            <label className="form-label" style={{ fontSize: '10px' }}>Custom Shop Title (Optional)</label>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder={systemSettings.store_name || 'MADINA HONDA CENTRE'}
+                              value={b.custom_title || ''}
+                              onChange={(e) => handleUpdateBlockProp('header', 'custom_title', e.target.value)}
+                              style={{ fontSize: '11px', padding: '4px 6px' }}
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Alignment:</span>
+                            {['left', 'center', 'right'].map(align => (
+                              <button
+                                key={align}
+                                type="button"
+                                onClick={() => handleUpdateBlockProp('header', 'align', align)}
+                                className="btn btn-sm"
+                                style={{
+                                  fontSize: '10px',
+                                  padding: '2px 6px',
+                                  background: (b.align || 'center') === align ? 'var(--honda-red)' : 'transparent',
+                                  color: (b.align || 'center') === align ? '#fff' : 'var(--text-dim)',
+                                  border: '1px solid var(--aronium-border)'
+                                }}
+                              >
+                                {align.toUpperCase()}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '4px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_tagline !== false}
+                                onChange={(e) => handleUpdateBlockProp('header', 'show_tagline', e.target.checked)}
+                              />
+                              Show Dealership Tagline
+                            </label>
+
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_address !== false}
+                                onChange={(e) => handleUpdateBlockProp('header', 'show_address', e.target.checked)}
+                              />
+                              Show Store Address
+                            </label>
+
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_phone !== false}
+                                onChange={(e) => handleUpdateBlockProp('header', 'show_phone', e.target.checked)}
+                              />
+                              Show Phone / WhatsApp
+                            </label>
+
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={b.show_ntn !== false}
+                                onChange={(e) => handleUpdateBlockProp('header', 'show_ntn', e.target.checked)}
+                              />
+                              Show NTN / Tax ID
+                            </label>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 2. Meta Block Settings */}
+                      {b.id === 'meta' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_date_time !== false}
+                              onChange={(e) => handleUpdateBlockProp('meta', 'show_date_time', e.target.checked)}
+                            />
+                            Show Date &amp; Time
+                          </label>
+
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_stream !== false}
+                              onChange={(e) => handleUpdateBlockProp('meta', 'show_stream', e.target.checked)}
+                            />
+                            Show Sale Type (Counter / Workshop)
+                          </label>
+
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_payment !== false}
+                              onChange={(e) => handleUpdateBlockProp('meta', 'show_payment', e.target.checked)}
+                            />
+                            Show Payment Method
+                          </label>
+                        </div>
+                      )}
+
+                      {/* 3. Customer Block Settings */}
+                      {b.id === 'customer' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_name !== false}
+                              onChange={(e) => handleUpdateBlockProp('customer', 'show_name', e.target.checked)}
+                            />
+                            Customer Name &amp; Phone
+                          </label>
+
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_bike !== false}
+                              onChange={(e) => handleUpdateBlockProp('customer', 'show_bike', e.target.checked)}
+                            />
+                            Motorcycle Model &amp; Reg #
+                          </label>
+
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_mechanic !== false}
+                              onChange={(e) => handleUpdateBlockProp('customer', 'show_mechanic', e.target.checked)}
+                            />
+                            Assigned Mechanic Name
+                          </label>
+
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_chassis === true}
+                              onChange={(e) => handleUpdateBlockProp('customer', 'show_chassis', e.target.checked)}
+                            />
+                            Chassis Number
+                          </label>
+                        </div>
+                      )}
+
+                      {/* 4. Items Table Settings */}
+                      {b.id === 'items' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_part_numbers !== false}
+                              onChange={(e) => handleUpdateBlockProp('items', 'show_part_numbers', e.target.checked)}
+                            />
+                            Show Part Numbers (Uncheck to save ~25% paper!)
+                          </label>
+
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_unit_rate !== false}
+                              onChange={(e) => handleUpdateBlockProp('items', 'show_unit_rate', e.target.checked)}
+                            />
+                            Show Unit Rate Column
+                          </label>
+                        </div>
+                      )}
+
+                      {/* 5. Labor Settings */}
+                      {b.id === 'labor' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '6px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_work_type !== false}
+                              onChange={(e) => handleUpdateBlockProp('labor', 'show_work_type', e.target.checked)}
+                            />
+                            Show Service Work Description
+                          </label>
+                        </div>
+                      )}
+
+                      {/* 6. Totals Settings */}
+                      {b.id === 'totals' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_subtotal !== false}
+                              onChange={(e) => handleUpdateBlockProp('totals', 'show_subtotal', e.target.checked)}
+                            />
+                            Show Subtotal Line
+                          </label>
+
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_discount !== false}
+                              onChange={(e) => handleUpdateBlockProp('totals', 'show_discount', e.target.checked)}
+                            />
+                            Show Discount Breakdown
+                          </label>
+
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_cash_paid !== false}
+                              onChange={(e) => handleUpdateBlockProp('totals', 'show_cash_paid', e.target.checked)}
+                            />
+                            Show Cash Received &amp; Change
+                          </label>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Grand Total Size:</span>
+                            <select
+                              className="form-select"
+                              style={{ fontSize: '10.5px', padding: '2px 4px' }}
+                              value={b.grand_total_size || 'large'}
+                              onChange={(e) => handleUpdateBlockProp('totals', 'grand_total_size', e.target.value)}
+                            >
+                              <option value="standard">Standard Bold</option>
+                              <option value="large">Extra Large (High Visibility)</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 7. Gate Pass Settings */}
+                      {b.id === 'gate_pass' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Barcode Height:</span>
+                            {[20, 26, 32].map(h => (
+                              <button
+                                key={h}
+                                type="button"
+                                onClick={() => handleUpdateBlockProp('gate_pass', 'barcode_height', h)}
+                                className="btn btn-sm"
+                                style={{
+                                  fontSize: '10px',
+                                  padding: '2px 6px',
+                                  background: (b.barcode_height || 26) === h ? 'var(--honda-red)' : 'transparent',
+                                  color: (b.barcode_height || 26) === h ? '#fff' : 'var(--text-dim)',
+                                  border: '1px solid var(--aronium-border)'
+                                }}
+                              >
+                                {h}px
+                              </button>
+                            ))}
+                          </div>
+
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_security_note !== false}
+                              onChange={(e) => handleUpdateBlockProp('gate_pass', 'show_security_note', e.target.checked)}
+                            />
+                            Show Security Verification Note
+                          </label>
+                        </div>
+                      )}
+
+                      {/* 8. Footer Settings */}
+                      {b.id === 'footer' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_greeting !== false}
+                              onChange={(e) => handleUpdateBlockProp('footer', 'show_greeting', e.target.checked)}
+                            />
+                            Show Thank You Greeting
+                          </label>
+
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={b.show_disclaimer !== false}
+                              onChange={(e) => handleUpdateBlockProp('footer', 'show_disclaimer', e.target.checked)}
+                            />
+                            Show Return Policy &amp; Warranty Terms
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
         </div>
 
-        {/* RIGHT COLUMN: Live Interactive Thermal Slip Preview */}
-        <div className="print-editor-pane" style={{ padding: '16px' }}>
+        {/* RIGHT COLUMN: Realistic Live Paper Roll Simulation */}
+        <div className="print-editor-pane" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           
           {/* Preview Controls Bar */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Eye size={14} color="var(--honda-red)" /> Live Roll Preview
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <Eye size={15} color="var(--honda-red)" /> Live Roll Output
               </span>
-              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                ({paperPreview} / {draftWidthMm}mm)
+
+              {/* Estimated Paper Length Badge */}
+              <span style={{
+                background: estimatedHeightMm < 60 ? 'rgba(34, 197, 94, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                color: estimatedHeightMm < 60 ? '#22c55e' : '#38bdf8',
+                border: `1px solid ${estimatedHeightMm < 60 ? 'rgba(34, 197, 94, 0.3)' : 'rgba(56, 189, 248, 0.3)'}`,
+                padding: '2px 8px',
+                borderRadius: '4px',
+                fontSize: '10.5px',
+                fontWeight: '700'
+              }}>
+                📏 ~{estimatedHeightMm} mm Length {estimatedHeightMm < 60 ? '(Zero-Waste ⚡)' : ''}
               </span>
             </div>
 
-            {/* Test Data & Size Toggles */}
+            {/* Test Transaction Switcher & Zoom */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <select
                 className="form-select"
                 style={{ fontSize: '11px', padding: '3px 6px' }}
                 value={sampleDataType}
                 onChange={(e) => setSampleDataType(e.target.value)}
-                title="Switch test transaction data"
               >
-                <option value="workshop">Workshop Job + Gate Pass</option>
+                <option value="workshop">Workshop Bill + Gate Pass</option>
                 <option value="retail">Counter Retail Sale</option>
               </select>
 
-              <div style={{ display: 'flex', background: 'var(--aronium-bg)', borderRadius: '4px', border: '1px solid var(--aronium-border)', padding: '1px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
                 <button
-                  onClick={() => setPaperPreview('80mm')}
-                  className="btn btn-sm"
-                  style={{
-                    fontSize: '10px',
-                    padding: '2px 6px',
-                    background: paperPreview === '80mm' ? 'var(--honda-red)' : 'transparent',
-                    color: paperPreview === '80mm' ? '#fff' : 'var(--text-dim)',
-                    border: 'none'
-                  }}
-                >
-                  80mm
-                </button>
-                <button
-                  onClick={() => setPaperPreview('58mm')}
-                  className="btn btn-sm"
-                  style={{
-                    fontSize: '10px',
-                    padding: '2px 6px',
-                    background: paperPreview === '58mm' ? 'var(--honda-red)' : 'transparent',
-                    color: paperPreview === '58mm' ? '#fff' : 'var(--text-dim)',
-                    border: 'none'
-                  }}
-                >
-                  58mm
-                </button>
-              </div>
-
-              {/* Zoom Buttons */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <button
+                  type="button"
                   onClick={() => setZoomLevel(z => Math.max(75, z - 15))}
                   className="btn btn-outline btn-sm"
                   style={{ padding: '2px 5px' }}
-                  title="Zoom Out"
                 >
                   <ZoomOut size={12} />
                 </button>
-                <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', minWidth: '32px', textAlign: 'center' }}>
-                  {zoomLevel}%
-                </span>
+                <span style={{ fontSize: '10px', minWidth: '32px', textAlign: 'center' }}>{zoomLevel}%</span>
                 <button
+                  type="button"
                   onClick={() => setZoomLevel(z => Math.min(150, z + 15))}
                   className="btn btn-outline btn-sm"
                   style={{ padding: '2px 5px' }}
-                  title="Zoom In"
                 >
                   <ZoomIn size={12} />
                 </button>
@@ -659,27 +894,28 @@ export default function PrintScriptEditor({ onNavigateBack }) {
             </div>
           </div>
 
-          {/* Thermal Paper Simulation Container */}
+          {/* Thermal Stage Container */}
           <div className="thermal-preview-stage">
-            <style>{draftCss}</style>
-            
             <div
-              className={`thermal-roll-slip printable-receipt-area paper-${paperPreview}`}
+              className={`thermal-roll-slip paper-${config.paper_size}`}
               style={{
-                width: paperPreview === '58mm' ? '180px' : paperPreview === 'a4' ? '460px' : '280px',
+                width: config.paper_size === '58mm' ? '180px' : '280px',
                 transform: `scale(${zoomLevel / 100})`,
                 transformOrigin: 'top center',
-                transition: 'transform 0.15s ease',
-                padding: '10px 12px'
+                transition: 'transform 0.15s ease'
               }}
-              dangerouslySetInnerHTML={{ __html: renderedHtml }}
+              dangerouslySetInnerHTML={{ __html: receiptHtml }}
             />
           </div>
 
-          {/* Bottom Info Bar */}
-          <div style={{ marginTop: '10px', fontSize: '11px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-            <span>Auto paper-cut active after last footer line.</span>
-            <span>Zero top &amp; bottom margins configured.</span>
+          {/* Footer Note */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <CheckCircle2 size={13} color="#22c55e" /> Zero margin print portal active (BC-95AC Ready)
+            </span>
+            <span>
+              Click <strong>"Print Test Slip"</strong> above to test physical paper cut
+            </span>
           </div>
 
         </div>
