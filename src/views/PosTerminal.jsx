@@ -6,7 +6,17 @@ import {
 } from 'lucide-react';
 import ThermalReceipt from '../components/ThermalReceipt';
 
-export default function PosTerminal({ onOpenShiftModal, onOpenSidebar, headerSearch, onNavigateView, onOpenPrintEditor }) {
+export default function PosTerminal({
+  activeShift,
+  onOpenShiftModal,
+  onOpenSidebar,
+  headerSearch,
+  setHeaderSearch,
+  onRegisterAddItem,
+  onNavigateView,
+  onOpenPrintEditor,
+  onFocusSearch
+}) {
   // Cart Items State: [{ product_id, part_number, name, quantity, unit_price, total_price, unit_cost }]
   const [cart, setCart] = useState([]);
   const [selectedItemIndex, setSelectedItemIndex] = useState(0);
@@ -178,7 +188,11 @@ export default function PosTerminal({ onOpenShiftModal, onOpenSidebar, headerSea
         handleSelectServiceType('b2b_wholesale');
       } else if (e.key === 'F3') {
         e.preventDefault();
-        setShowSearchModal(true);
+        if (onFocusSearch) {
+          onFocusSearch();
+        } else {
+          setShowSearchModal(true);
+        }
       } else if (e.key === 'F4') {
         e.preventDefault();
         if (cart.length > 0) {
@@ -282,6 +296,13 @@ export default function PosTerminal({ onOpenShiftModal, onOpenSidebar, headerSea
       return [...prev, newItem];
     });
   };
+
+  // Expose addItemToCart to parent App.jsx for instant header search & barcode adding
+  useEffect(() => {
+    if (onRegisterAddItem) {
+      onRegisterAddItem(addItemToCart);
+    }
+  }, [onRegisterAddItem, allProducts, serviceType]);
 
   // Delete Selected Item
   const handleDeleteItem = () => {
@@ -699,49 +720,134 @@ export default function PosTerminal({ onOpenShiftModal, onOpenSidebar, headerSea
                 </div>
               )
             ) : cart.length === 0 ? (
-              /* Composed Tactile Empty State for Retail & Wholesale */
-              <div className="aronium-empty-state">
-                <div className="aronium-empty-icon">
-                  {serviceType === 'b2b_wholesale' ? <Store size={28} /> : <ShoppingBag size={28} />}
-                </div>
-                <div className="aronium-empty-title">
-                  {serviceType === 'b2b_wholesale'
-                    ? `Wholesale Order for ${selectedShop ? selectedShop.shop_name : 'Partner Dealer'}`
-                    : 'Register Ready for Next Customer'}
-                </div>
-                <div className="aronium-empty-subtitle">
-                  {serviceType === 'b2b_wholesale'
-                    ? 'Scan barcode or click fast-mover parts below to add on wholesale trade pricing:'
-                    : 'Scan barcode, search with F3, or click an essential Atlas Honda fast-mover below:'}
-                </div>
-
-                {/* Fast-Mover Quick-Add Pills */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', maxWidth: '460px', marginTop: '16px' }}>
-                  {allProducts.slice(0, 4).map(p => {
-                    const price = serviceType === 'b2b_wholesale' ? p.wholesale_price : p.retail_price;
-                    return (
+              headerSearch && headerSearch.trim() ? (
+                /* Instant Search Results Panel in Receipt View */
+                <div style={{ padding: '16px', overflowY: 'auto', height: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid var(--aronium-border)' }}>
+                    <div>
+                      <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)' }}>
+                        Search matches for "{headerSearch}"
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                        ({searchResults.length} {searchResults.length === 1 ? 'part' : 'parts'} found)
+                      </span>
+                    </div>
+                    {setHeaderSearch && (
                       <button
-                        key={p.id}
-                        onClick={() => addItemToCart(p)}
-                        className="btn btn-secondary btn-sm"
-                        style={{ fontSize: '11px', padding: '6px 12px', gap: '6px', background: 'var(--aronium-surface)', borderColor: 'var(--aronium-border-light)' }}
-                        title={`Add ${p.name} - PKR ${price}`}
+                        onClick={() => setHeaderSearch('')}
+                        className="btn btn-outline btn-sm"
+                        style={{ fontSize: '11px', padding: '2px 8px' }}
                       >
-                        <Plus size={12} color="var(--accent-emerald)" />
-                        <span>{p.name.length > 22 ? p.name.slice(0, 22) + '...' : p.name}</span>
-                        <span style={{ color: 'var(--accent-emerald)', fontWeight: '700', fontFamily: 'var(--font-mono)' }}>Rs {price}</span>
+                        Clear Search
                       </button>
-                    );
-                  })}
-                </div>
+                    )}
+                  </div>
 
-                <div style={{ display: 'flex', gap: '14px', marginTop: '24px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                  <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F3</kbd> Search</span>
-                  <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F12</kbd> Cash</span>
-                  <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F10</kbd> Payment</span>
-                  <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F8</kbd> New</span>
+                  {searchResults.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-muted)' }}>
+                      <p style={{ fontSize: '13px', fontWeight: '600' }}>No products matching "{headerSearch}"</p>
+                      <p style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>Check spelling, part number or barcode. Or press F3 for full catalog.</p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {searchResults.map(p => {
+                        const price = serviceType === 'b2b_wholesale' ? p.wholesale_price : p.retail_price;
+                        const isOutOfStock = p.stock_quantity <= 0;
+                        return (
+                          <div
+                            key={p.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              background: 'var(--aronium-surface)',
+                              border: '1px solid var(--aronium-border)',
+                              borderRadius: '6px',
+                              padding: '10px 14px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontWeight: '700', fontSize: '13px', color: 'var(--text-main)' }}>{p.name}</span>
+                                {p.model_compat && (
+                                  <span className="card-badge badge-blue" style={{ fontSize: '9px', padding: '1px 5px' }}>{p.model_compat}</span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', gap: '10px' }}>
+                                <span style={{ fontFamily: 'var(--font-mono)', color: '#fb7185' }}>{p.part_number}</span>
+                                {p.shelf_location && <span>📍 {p.shelf_location}</span>}
+                                <span>Stock: <strong style={{ color: isOutOfStock ? '#ef4444' : '#10b981' }}>{p.stock_quantity}</strong></span>
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <span style={{ fontSize: '15px', fontWeight: '800', fontFamily: 'var(--font-mono)', color: 'var(--accent-emerald)' }}>
+                                PKR {price}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  addItemToCart(p);
+                                  if (setHeaderSearch) setHeaderSearch('');
+                                }}
+                                disabled={isOutOfStock}
+                                className="btn btn-primary btn-sm"
+                                style={{ fontSize: '11.5px', padding: '6px 14px', gap: '6px' }}
+                              >
+                                <Plus size={13} />
+                                <span>Add to Cart</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              </div>
+              ) : (
+                /* Composed Tactile Empty State for Retail & Wholesale */
+                <div className="aronium-empty-state">
+                  <div className="aronium-empty-icon">
+                    {serviceType === 'b2b_wholesale' ? <Store size={28} /> : <ShoppingBag size={28} />}
+                  </div>
+                  <div className="aronium-empty-title">
+                    {serviceType === 'b2b_wholesale'
+                      ? `Wholesale Order for ${selectedShop ? selectedShop.shop_name : 'Partner Dealer'}`
+                      : 'Register Ready for Next Customer'}
+                  </div>
+                  <div className="aronium-empty-subtitle">
+                    {serviceType === 'b2b_wholesale'
+                      ? 'Scan barcode or click fast-mover parts below to add on wholesale trade pricing:'
+                      : 'Scan barcode, search with F3, or click an essential Atlas Honda fast-mover below:'}
+                  </div>
+
+                  {/* Fast-Mover Quick-Add Pills */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', maxWidth: '460px', marginTop: '16px' }}>
+                    {allProducts.slice(0, 4).map(p => {
+                      const price = serviceType === 'b2b_wholesale' ? p.wholesale_price : p.retail_price;
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => addItemToCart(p)}
+                          className="btn btn-secondary btn-sm"
+                          style={{ fontSize: '11px', padding: '6px 12px', gap: '6px', background: 'var(--aronium-surface)', borderColor: 'var(--aronium-border-light)' }}
+                          title={`Add ${p.name} - PKR ${price}`}
+                        >
+                          <Plus size={12} color="var(--accent-emerald)" />
+                          <span>{p.name.length > 22 ? p.name.slice(0, 22) + '...' : p.name}</span>
+                          <span style={{ color: 'var(--accent-emerald)', fontWeight: '700', fontFamily: 'var(--font-mono)' }}>Rs {price}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '14px', marginTop: '24px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                    <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F3</kbd> Search</span>
+                    <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F12</kbd> Cash</span>
+                    <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F10</kbd> Payment</span>
+                    <span><kbd style={{ background: 'var(--aronium-surface)', padding: '2px 5px', borderRadius: '3px', border: '1px solid var(--aronium-border)', fontFamily: 'var(--font-mono)' }}>F8</kbd> New</span>
+                  </div>
+                </div>
+              )
             ) : (
               /* Items List */
               cart.map((item, idx) => {
@@ -825,7 +931,7 @@ export default function PosTerminal({ onOpenShiftModal, onOpenSidebar, headerSea
             <span>Delete</span>
           </button>
 
-          <button onClick={() => setShowSearchModal(true)} className="aronium-tile-btn" title="Search products catalog (F3)">
+          <button onClick={() => { if (onFocusSearch) { onFocusSearch(); } else { setShowSearchModal(true); } }} className="aronium-tile-btn" title="Search products catalog (F3)">
             <span className="aronium-tile-badge">F3</span>
             <Search size={20} color="#38bdf8" />
             <span>Search</span>

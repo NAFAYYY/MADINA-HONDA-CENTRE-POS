@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Menu, Barcode, Hash, Tag, Search, ArrowLeft,
   Lock, Sun, Moon, Minus, Square, X, ShieldAlert,
-  Settings, Printer
+  Settings, Printer, Plus
 } from 'lucide-react';
 
 import PosTerminal from './views/PosTerminal';
@@ -34,18 +34,113 @@ export default function App() {
   // Petty Expense Modal
   const [showExpenseModal, setShowExpenseModal] = useState(false);
 
-  // Global search query in header
+  // Global search query in header & autocomplete dropdown
   const [headerSearch, setHeaderSearch] = useState('');
+  const [allProducts, setAllProducts] = useState([]);
+  const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
+  const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
+
+  const searchBoxRef = useRef(null);
+  const searchInputRef = useRef(null);
+  const addToCartRef = useRef(null);
 
   // Apply Theme
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
-  // Fetch current shift
+  // Fetch current shift and products catalog on mount
   useEffect(() => {
     fetchCurrentShift();
+    fetchProducts();
   }, []);
+
+  const fetchProducts = async () => {
+    try {
+      const res = await fetch('/api/products');
+      const data = await res.json();
+      setAllProducts(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to fetch products for header search:', err);
+    }
+  };
+
+  // Instant Autocomplete Search Matches
+  const matchingProducts = useMemo(() => {
+    if (!headerSearch.trim()) return [];
+    const q = headerSearch.toLowerCase().trim();
+    return allProducts.filter(p =>
+      (p.name && p.name.toLowerCase().includes(q)) ||
+      (p.part_number && p.part_number.toLowerCase().includes(q)) ||
+      (p.barcode && p.barcode.toLowerCase().includes(q)) ||
+      (p.model_compat && p.model_compat.toLowerCase().includes(q))
+    ).slice(0, 10);
+  }, [headerSearch, allProducts]);
+
+  // Click Outside to Close Search Dropdown
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target)) {
+        setIsSearchDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Global F3 shortcut to focus search input
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if (e.key === 'F3') {
+        e.preventDefault();
+        if (activeView !== 'pos') setActiveView('pos');
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+          searchInputRef.current.select();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [activeView]);
+
+  // Add selected product to POS cart and clear search
+  const handleSelectProduct = (product) => {
+    if (activeView !== 'pos') {
+      setActiveView('pos');
+    }
+    if (addToCartRef.current) {
+      addToCartRef.current(product);
+    }
+    setHeaderSearch('');
+    setIsSearchDropdownOpen(false);
+    setSelectedSearchIndex(0);
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  };
+
+  // Keyboard navigation inside search input
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setIsSearchDropdownOpen(true);
+      setSelectedSearchIndex(i => Math.min(matchingProducts.length - 1, i + 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedSearchIndex(i => Math.max(0, i - 1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (matchingProducts.length > 0) {
+        const selected = matchingProducts[selectedSearchIndex] || matchingProducts[0];
+        handleSelectProduct(selected);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsSearchDropdownOpen(false);
+      setHeaderSearch('');
+    }
+  };
 
   const fetchCurrentShift = async () => {
     try {
@@ -124,32 +219,148 @@ export default function App() {
         </div>
 
         {/* Prominent Search Bar (Search products by name, code or barcode) */}
-        <div className="aronium-search-box">
+        <div className="aronium-search-box" ref={searchBoxRef}>
           <Search size={15} style={{ position: 'absolute', left: '10px', color: 'var(--text-muted)' }} />
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Search products by name, code or barcode (or press F3)..."
             className="aronium-search-input"
             value={headerSearch}
-            onChange={(e) => setHeaderSearch(e.target.value)}
+            onChange={(e) => {
+              setHeaderSearch(e.target.value);
+              setIsSearchDropdownOpen(true);
+              setSelectedSearchIndex(0);
+            }}
+            onKeyDown={handleSearchKeyDown}
             onFocus={() => {
               if (activeView !== 'pos') setActiveView('pos');
+              if (headerSearch.trim()) setIsSearchDropdownOpen(true);
             }}
           />
-          <span style={{
-            position: 'absolute',
-            right: '8px',
-            fontSize: '10px',
-            fontWeight: '700',
-            color: 'var(--text-muted)',
-            fontFamily: 'var(--font-mono)',
-            background: 'var(--aronium-bg)',
-            padding: '2px 5px',
-            borderRadius: '3px',
-            border: '1px solid var(--aronium-border)'
-          }}>
+
+          {/* Clear Button (X) */}
+          {headerSearch && (
+            <button
+              type="button"
+              className="search-clear-btn"
+              onClick={() => {
+                setHeaderSearch('');
+                setIsSearchDropdownOpen(false);
+                if (searchInputRef.current) searchInputRef.current.focus();
+              }}
+              title="Clear search"
+            >
+              <X size={14} />
+            </button>
+          )}
+
+          <span
+            onClick={() => {
+              if (activeView !== 'pos') setActiveView('pos');
+              if (searchInputRef.current) {
+                searchInputRef.current.focus();
+                searchInputRef.current.select();
+              }
+            }}
+            style={{
+              position: 'absolute',
+              right: '8px',
+              fontSize: '10px',
+              fontWeight: '700',
+              color: 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)',
+              background: 'var(--aronium-bg)',
+              padding: '2px 5px',
+              borderRadius: '3px',
+              border: '1px solid var(--aronium-border)',
+              cursor: 'pointer'
+            }}
+            title="Press F3 to focus search bar"
+          >
             F3
           </span>
+
+          {/* Live Floating Dropdown */}
+          {isSearchDropdownOpen && headerSearch.trim() && (
+            <div className="aronium-search-dropdown">
+              <div className="search-dropdown-header">
+                <span>
+                  Matching Spare Parts ({matchingProducts.length} found)
+                </span>
+                <span style={{ fontSize: '10px' }}>
+                  [↑/↓ Navigate • Enter / Click to Add • Esc to Close]
+                </span>
+              </div>
+
+              <div className="search-dropdown-list">
+                {matchingProducts.length > 0 ? (
+                  matchingProducts.map((p, idx) => {
+                    const isSelected = selectedSearchIndex === idx;
+                    const isOutOfStock = p.stock_quantity <= 0;
+                    return (
+                      <div
+                        key={p.id}
+                        className={`search-dropdown-item ${isSelected ? 'is-selected' : ''}`}
+                        onClick={() => handleSelectProduct(p)}
+                        onMouseEnter={() => setSelectedSearchIndex(idx)}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, paddingRight: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>
+                              {p.name}
+                            </span>
+                            {p.model_compat && (
+                              <span className="card-badge badge-blue" style={{ fontSize: '9.5px', padding: '1px 5px' }}>
+                                {p.model_compat}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', color: '#fb7185', fontWeight: '600' }}>
+                              {p.part_number}
+                            </span>
+                            {p.shelf_location && (
+                              <span>📍 {p.shelf_location}</span>
+                            )}
+                            {p.barcode && p.barcode !== p.part_number && (
+                              <span>Barcode: {p.barcode}</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span className={`card-badge ${isOutOfStock ? 'badge-red' : p.stock_quantity <= (p.min_stock_alert || 5) ? 'badge-amber' : 'badge-emerald'}`} style={{ fontSize: '10.5px' }}>
+                            {isOutOfStock ? 'Out of Stock' : `${p.stock_quantity} in stock`}
+                          </span>
+
+                          <span style={{ fontSize: '14px', fontWeight: '800', color: 'var(--accent-emerald)', fontFamily: 'var(--font-mono)', minWidth: '75px', textAlign: 'right' }}>
+                            PKR {p.retail_price}
+                          </span>
+
+                          <button
+                            type="button"
+                            disabled={isOutOfStock}
+                            className="btn btn-primary btn-sm"
+                            style={{ fontSize: '11px', padding: '3px 8px', gap: '4px' }}
+                          >
+                            <Plus size={12} /> Add
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12.5px' }}>
+                    <div>No products found matching "<strong>{headerSearch}</strong>"</div>
+                    <div style={{ fontSize: '11px', marginTop: '4px', color: 'var(--text-dim)' }}>
+                      Verify part number or Honda description. Press <strong>F3</strong> for full catalog.
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Header Area */}
@@ -253,8 +464,16 @@ export default function App() {
           onOpenShiftModal={() => setShowOpenShiftModal(true)}
           onOpenSidebar={() => setIsSidebarOpen(true)}
           headerSearch={headerSearch}
+          setHeaderSearch={setHeaderSearch}
+          onRegisterAddItem={(fn) => { addToCartRef.current = fn; }}
           onNavigateView={setActiveView}
           onOpenPrintEditor={() => setActiveView('print-editor')}
+          onFocusSearch={() => {
+            if (searchInputRef.current) {
+              searchInputRef.current.focus();
+              searchInputRef.current.select();
+            }
+          }}
         />
       )}
 
