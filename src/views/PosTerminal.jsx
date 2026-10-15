@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   Search, X, ShoppingBag, Plus, Percent, Tag, User,
   DollarSign, Bookmark, RotateCcw, Lock, ArrowRightLeft,
-  Trash2, Wrench, Store, Printer, RefreshCw, Check
+  Trash2, Wrench, Store, Printer, RefreshCw, Check,
+  Edit3, Minus
 } from 'lucide-react';
 import ThermalReceipt from '../components/ThermalReceipt';
 
@@ -39,6 +40,11 @@ export default function PosTerminal({
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showQtyModal, setShowQtyModal] = useState(false);
   const [newQty, setNewQty] = useState('1');
+  const [showItemEditModal, setShowItemEditModal] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [editModalTab, setEditModalTab] = useState('all'); // 'all', 'qty', 'price'
+  const [customPrice, setCustomPrice] = useState('');
+  const [promptOnAdd, setPromptOnAdd] = useState(() => localStorage.getItem('pos_prompt_on_add') === 'true');
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [discountValue, setDiscountValue] = useState(0);
   const [showServiceTypeModal, setShowServiceTypeModal] = useState(false);
@@ -196,8 +202,12 @@ export default function PosTerminal({
       } else if (e.key === 'F4') {
         e.preventDefault();
         if (cart.length > 0) {
-          setNewQty(String(cart[selectedItemIndex]?.quantity || 1));
-          setShowQtyModal(true);
+          handleOpenItemEdit(selectedItemIndex, 'qty');
+        }
+      } else if (e.key === 'F6') {
+        e.preventDefault();
+        if (cart.length > 0) {
+          handleOpenItemEdit(selectedItemIndex, 'price');
         }
       } else if (e.key === 'F8') {
         e.preventDefault();
@@ -258,51 +268,163 @@ export default function PosTerminal({
       return;
     }
 
-    setCart(prev => {
-      const existingIdx = prev.findIndex(item => item.product_id === product.id);
-      if (existingIdx >= 0) {
-        const updated = [...prev];
-        const current = updated[existingIdx];
-        if (current.quantity >= product.stock_quantity) {
-          alert(`Maximum store stock reached (${product.stock_quantity})`);
-          return prev;
-        }
-        const nextQty = current.quantity + 1;
-        const unitPrice = getProductUnitPrice(product, nextQty, serviceType);
-        updated[existingIdx] = {
-          ...current,
-          quantity: nextQty,
-          unit_price: unitPrice,
-          total_price: nextQty * unitPrice,
-          slabs: product.slabs || current.slabs || []
-        };
-        setSelectedItemIndex(existingIdx);
-        return updated;
-      }
+    const existingIdx = cart.findIndex(item => item.product_id === product.id);
+    let itemToCustomize;
 
+    if (existingIdx >= 0) {
+      const current = cart[existingIdx];
+      if (current.quantity >= product.stock_quantity) {
+        alert(`Maximum store stock reached (${product.stock_quantity})`);
+        return;
+      }
+      const nextQty = current.quantity + 1;
+      const unitPrice = current.is_price_overridden
+        ? current.unit_price
+        : getProductUnitPrice(product, nextQty, serviceType);
+
+      itemToCustomize = {
+        ...current,
+        quantity: nextQty,
+        unit_price: unitPrice,
+        total_price: nextQty * unitPrice,
+        slabs: product.slabs || current.slabs || []
+      };
+
+      setCart(prev => {
+        const copy = [...prev];
+        copy[existingIdx] = itemToCustomize;
+        return copy;
+      });
+      setSelectedItemIndex(existingIdx);
+    } else {
       const unitPrice = getProductUnitPrice(product, 1, serviceType);
-      const newItem = {
+      itemToCustomize = {
         product_id: product.id,
         part_number: product.part_number,
         name: product.name,
         quantity: 1,
         unit_price: unitPrice,
+        original_price: unitPrice,
         total_price: unitPrice,
         unit_cost: product.cost_price,
         stock_quantity: product.stock_quantity,
-        slabs: product.slabs || []
+        slabs: product.slabs || [],
+        is_price_overridden: false
       };
-      setSelectedItemIndex(prev.length);
-      return [...prev, newItem];
+
+      setCart(prev => [...prev, itemToCustomize]);
+      setSelectedItemIndex(cart.length);
+    }
+
+    // If "Prompt on Add" is enabled, immediately prompt to change price and select quantity
+    if (promptOnAdd && itemToCustomize) {
+      setEditingItem(itemToCustomize);
+      setNewQty(String(itemToCustomize.quantity));
+      setCustomPrice(String(itemToCustomize.unit_price));
+      setEditModalTab('all');
+      setShowItemEditModal(true);
+    }
+  };
+
+  // Toggle "Prompt Price & Qty on Add" setting
+  const handleTogglePromptOnAdd = () => {
+    setPromptOnAdd(prev => {
+      const next = !prev;
+      localStorage.setItem('pos_prompt_on_add', String(next));
+      return next;
     });
   };
 
-  // Expose addItemToCart to parent App.jsx for instant header search & barcode adding
-  useEffect(() => {
-    if (onRegisterAddItem) {
-      onRegisterAddItem(addItemToCart);
+  // Open Item Customization Modal (Price, Quantity, or Both)
+  const handleOpenItemEdit = (index, tab = 'all') => {
+    const item = cart[index];
+    if (!item) return;
+    setSelectedItemIndex(index);
+    setEditingItem(item);
+    setNewQty(String(item.quantity));
+    setCustomPrice(String(item.unit_price));
+    setEditModalTab(tab);
+    setShowItemEditModal(true);
+  };
+
+  // Apply Price & Quantity Changes from Modal
+  const handleApplyItemCustomization = () => {
+    const qty = parseInt(newQty);
+    const price = parseFloat(customPrice);
+
+    if (isNaN(qty) || qty <= 0) {
+      alert('Please enter a valid quantity of 1 or more.');
+      return;
     }
-  }, [onRegisterAddItem, allProducts, serviceType]);
+    if (isNaN(price) || price < 0) {
+      alert('Please enter a valid price in PKR.');
+      return;
+    }
+
+    setCart(prev => {
+      const updated = [...prev];
+      const targetItem = editingItem || updated[selectedItemIndex];
+      const idx = targetItem
+        ? updated.findIndex(i => i.product_id === targetItem.product_id)
+        : selectedItemIndex;
+
+      if (idx >= 0 && updated[idx]) {
+        const item = updated[idx];
+        if (qty > item.stock_quantity) {
+          alert(`Warning: Only ${item.stock_quantity} available in stock!`);
+        }
+        const originalPrice = item.original_price || item.unit_price;
+        const isOverridden = Math.abs(price - originalPrice) > 0.01;
+        updated[idx] = {
+          ...item,
+          quantity: qty,
+          unit_price: price,
+          total_price: qty * price,
+          is_price_overridden: isOverridden
+        };
+        setSelectedItemIndex(idx);
+      }
+      return updated;
+    });
+
+    setShowItemEditModal(false);
+    setEditingItem(null);
+  };
+
+  // Direct Inline Quantity Stepper (+ / -) on Cart Rows
+  const handleUpdateItemQty = (index, newQuantity) => {
+    if (newQuantity <= 0) {
+      setCart(prev => prev.filter((_, i) => i !== index));
+      setSelectedItemIndex(prev => Math.max(0, prev - 1));
+      return;
+    }
+    setCart(prev => {
+      const updated = [...prev];
+      const item = updated[index];
+      if (!item) return prev;
+      if (newQuantity > item.stock_quantity) {
+        alert(`Maximum store stock reached (${item.stock_quantity})`);
+        return prev;
+      }
+      const prod = allProducts.find(p => p.id === item.product_id) || item;
+      const unitPrice = item.is_price_overridden
+        ? item.unit_price
+        : getProductUnitPrice(prod, newQuantity, serviceType);
+
+      updated[index] = {
+        ...item,
+        quantity: newQuantity,
+        unit_price: unitPrice,
+        total_price: newQuantity * unitPrice
+      };
+      return updated;
+    });
+  };
+
+  // Legacy F4 Qty Handler
+  const handleApplyQty = () => {
+    handleApplyItemCustomization();
+  };
 
   // Delete Selected Item
   const handleDeleteItem = () => {
@@ -319,34 +441,6 @@ export default function PosTerminal({
     setSelectedJob(null);
     setSelectedCustomer(null);
     setSearchInput('');
-  };
-
-  // Update Quantity of Selected Item (F4)
-  const handleApplyQty = () => {
-    const qty = parseInt(newQty);
-    if (!qty || qty <= 0) return;
-
-    setCart(prev => {
-      const updated = [...prev];
-      if (updated[selectedItemIndex]) {
-        const item = updated[selectedItemIndex];
-        if (qty > item.stock_quantity) {
-          alert(`Only ${item.stock_quantity} available in stock!`);
-          return prev;
-        }
-        const prod = allProducts.find(p => p.id === item.product_id) || item;
-        const unitPrice = getProductUnitPrice(prod, qty, serviceType);
-        updated[selectedItemIndex] = {
-          ...item,
-          quantity: qty,
-          unit_price: unitPrice,
-          total_price: qty * unitPrice,
-          slabs: prod.slabs || item.slabs || []
-        };
-      }
-      return updated;
-    });
-    setShowQtyModal(false);
   };
 
   // Calculate Totals
@@ -859,7 +953,14 @@ export default function PosTerminal({
                     className={`aronium-row ${isSelected ? 'selected' : ''}`}
                   >
                     <div className="col-prod-name">
-                      <div style={{ fontWeight: '600' }}>{item.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontWeight: '600' }}>{item.name}</span>
+                        {item.is_price_overridden && (
+                          <span className="card-badge badge-amber" style={{ fontSize: '9px', padding: '1px 5px' }} title="Price overridden by cashier">
+                            Custom Price
+                          </span>
+                        )}
+                      </div>
                       <div style={{ fontSize: '11px', color: isSelected ? '#cbd5e1' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span>{item.part_number}</span>
                         {serviceType === 'b2b_wholesale' && item.slabs && item.slabs.length > 1 && (
@@ -874,14 +975,148 @@ export default function PosTerminal({
                         )}
                       </div>
                     </div>
-                    <div className="col-qty" style={{ fontWeight: '700', fontFamily: 'var(--font-mono)' }}>{item.quantity}</div>
-                    <div className="col-price" style={{ fontFamily: 'var(--font-mono)' }}>{item.unit_price.toFixed(2)}</div>
-                    <div className="col-amount" style={{ fontWeight: '700', fontFamily: 'var(--font-mono)' }}>{item.total_price.toFixed(2)}</div>
+
+                    {/* Quantity with inline steppers & click-to-select */}
+                    <div className="col-qty" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '3px' }}>
+                      <button
+                        type="button"
+                        className="btn-stepper"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateItemQty(idx, item.quantity - 1);
+                        }}
+                        title="Decrease quantity"
+                      >
+                        <Minus size={11} />
+                      </button>
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenItemEdit(idx, 'qty');
+                        }}
+                        style={{
+                          cursor: 'pointer',
+                          minWidth: '22px',
+                          textAlign: 'center',
+                          fontWeight: '700',
+                          fontFamily: 'var(--font-mono)',
+                          padding: '2px 4px',
+                          borderRadius: '3px',
+                          background: isSelected ? 'rgba(56, 189, 248, 0.18)' : 'rgba(255,255,255,0.04)'
+                        }}
+                        title="Click to select quantity"
+                      >
+                        {item.quantity}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn-stepper"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateItemQty(idx, item.quantity + 1);
+                        }}
+                        title="Increase quantity"
+                      >
+                        <Plus size={11} />
+                      </button>
+                    </div>
+
+                    {/* Price with click-to-edit */}
+                    <div
+                      className="col-price"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenItemEdit(idx, 'price');
+                      }}
+                      style={{
+                        cursor: 'pointer',
+                        fontFamily: 'var(--font-mono)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'flex-end',
+                        gap: '4px'
+                      }}
+                      title="Click to change price"
+                    >
+                      <span style={{ borderBottom: '1px dashed var(--aronium-border-light)', paddingBottom: '1px', color: item.is_price_overridden ? '#38bdf8' : 'inherit' }}>
+                        {item.unit_price.toFixed(2)}
+                      </span>
+                      <Edit3 size={11} style={{ opacity: 0.5, color: item.is_price_overridden ? '#38bdf8' : 'inherit' }} />
+                    </div>
+
+                    <div className="col-amount" style={{ fontWeight: '700', fontFamily: 'var(--font-mono)' }}>
+                      {item.total_price.toFixed(2)}
+                    </div>
                   </div>
                 );
               })
             )}
           </div>
+
+          {/* Cart Selected Item Quick-Action Toolbar */}
+          {cart.length > 0 && cart[selectedItemIndex] && (
+            <div className="cart-toolbar">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Item:</span>
+                <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {cart[selectedItemIndex].name}
+                </span>
+                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--accent-blue)' }}>
+                  (Rs {cart[selectedItemIndex].unit_price} × {cart[selectedItemIndex].quantity})
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => handleOpenItemEdit(selectedItemIndex, 'price')}
+                  className="btn btn-outline btn-xs"
+                  style={{ fontSize: '11px', padding: '3px 8px', gap: '4px', borderColor: 'var(--accent-emerald)', color: 'var(--accent-emerald)' }}
+                  title="Change unit price for this item (F6)"
+                >
+                  <Tag size={12} />
+                  <span>Change Price</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenItemEdit(selectedItemIndex, 'qty')}
+                  className="btn btn-outline btn-xs"
+                  style={{ fontSize: '11px', padding: '3px 8px', gap: '4px', borderColor: 'var(--accent-amber)', color: 'var(--accent-amber)' }}
+                  title="Select quantity for this item (F4)"
+                >
+                  <ShoppingBag size={12} />
+                  <span>Select Qty</span>
+                </button>
+
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    fontSize: '11px',
+                    color: promptOnAdd ? '#38bdf8' : 'var(--text-muted)',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    marginLeft: '4px',
+                    background: promptOnAdd ? 'rgba(56, 189, 248, 0.12)' : 'transparent',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    border: '1px solid ' + (promptOnAdd ? 'rgba(56, 189, 248, 0.3)' : 'transparent')
+                  }}
+                  title="When turned on, adding any product opens the Price & Quantity window automatically"
+                >
+                  <input
+                    type="checkbox"
+                    checked={promptOnAdd}
+                    onChange={handleTogglePromptOnAdd}
+                    style={{ cursor: 'pointer', accentColor: '#38bdf8' }}
+                  />
+                  <span>Prompt on Add</span>
+                </label>
+              </div>
+            </div>
+          )}
 
         {/* Totals Summary Footer matching Aronium layout */}
         <div className="aronium-totals-footer">
@@ -940,8 +1175,9 @@ export default function PosTerminal({
           <button
             onClick={() => {
               if (cart.length > 0) {
-                setNewQty(String(cart[selectedItemIndex]?.quantity || 1));
-                setShowQtyModal(true);
+                handleOpenItemEdit(selectedItemIndex, 'qty');
+              } else {
+                alert('Add an item to cart first to select quantity.');
               }
             }}
             className="aronium-tile-btn"
@@ -1063,8 +1299,19 @@ export default function PosTerminal({
             <span>Lock</span>
           </button>
 
-          <button onClick={() => alert('Price override mode')} className="aronium-tile-btn" title="Override Item Price">
-            <Tag size={18} color="#94a3b8" />
+          <button
+            onClick={() => {
+              if (cart.length > 0) {
+                handleOpenItemEdit(selectedItemIndex, 'price');
+              } else {
+                alert('Add an item to cart first to change its price.');
+              }
+            }}
+            className="aronium-tile-btn"
+            title="Change item price / Price override (F6)"
+          >
+            <span className="aronium-tile-badge">F6</span>
+            <Tag size={18} color="#38bdf8" />
             <span>Price</span>
           </button>
         </div>
@@ -1156,55 +1403,286 @@ export default function PosTerminal({
         </div>
       )}
 
-      {/* ================= MODAL: F4 QUANTITY CHANGE ================= */}
-      {showQtyModal && (
-        <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: '340px' }}>
-            <div className="modal-header">
-              <h3 style={{ fontSize: '14px', fontWeight: '700' }}>Change Item Quantity (F4)</h3>
-              <button onClick={() => setShowQtyModal(false)} className="btn-outline" style={{ border: 'none' }}><X size={16} /></button>
-            </div>
-            <div className="modal-body" style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '3px' }}>
-                {cart[selectedItemIndex]?.name}
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                Part #{cart[selectedItemIndex]?.part_number}
-              </div>
-              <input
-                type="number"
-                min="1"
-                autoFocus
-                className="form-input"
-                style={{ fontSize: '26px', textAlign: 'center', fontWeight: '800' }}
-                value={newQty}
-                onChange={(e) => setNewQty(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleApplyQty()}
-              />
-              {serviceType === 'b2b_wholesale' && cart[selectedItemIndex]?.slabs?.length > 1 && (
-                <div style={{ marginTop: '10px', padding: '8px', background: 'var(--aronium-bg)', borderRadius: '4px', fontSize: '11px', textAlign: 'left', border: '1px solid var(--aronium-border)' }}>
-                  <div style={{ fontWeight: '700', color: 'var(--accent-blue)', marginBottom: '4px' }}>
-                    Wholesale Volume Slabs:
+      {/* ================= MODAL: CUSTOMIZE ITEM PRICE & QUANTITY ================= */}
+      {showItemEditModal && (() => {
+        const currentItem = editingItem || cart[selectedItemIndex];
+        if (!currentItem) return null;
+        return (
+          <div className="modal-backdrop">
+            <div className="modal-content" style={{ maxWidth: '450px' }}>
+              <div className="modal-header">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: '800' }}>
+                    {currentItem.name}
+                  </h3>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', gap: '10px' }}>
+                    <span>Part: <strong style={{ color: '#fb7185' }}>{currentItem.part_number}</strong></span>
+                    <span>Stock: <strong style={{ color: '#34d399' }}>{currentItem.stock_quantity} available</strong></span>
                   </div>
-                  {cart[selectedItemIndex].slabs.map((s, idx) => {
-                    const isMatched = parseInt(newQty) >= s.min_quantity;
-                    return (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: isMatched ? 'var(--accent-emerald)' : 'var(--text-muted)' }}>
-                        <span>Qty ≥ {s.min_quantity} pcs:</span>
-                        <strong style={{ fontFamily: 'var(--font-mono)' }}>PKR {s.dealer_price}</strong>
-                      </div>
-                    );
-                  })}
                 </div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button onClick={() => setShowQtyModal(false)} className="btn btn-secondary">Cancel</button>
-              <button onClick={handleApplyQty} className="btn btn-primary">Apply Quantity</button>
+                <button onClick={() => { setShowItemEditModal(false); setEditingItem(null); }} className="btn-outline" style={{ border: 'none' }}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Modal Tabs */}
+              <div style={{ display: 'flex', gap: '6px', padding: '10px 16px', background: 'var(--aronium-bg)', borderBottom: '1px solid var(--aronium-border)' }}>
+                <button
+                  type="button"
+                  className={`item-edit-tab ${editModalTab === 'all' ? 'active' : ''}`}
+                  onClick={() => setEditModalTab('all')}
+                >
+                  Price &amp; Quantity
+                </button>
+                <button
+                  type="button"
+                  className={`item-edit-tab ${editModalTab === 'qty' ? 'active' : ''}`}
+                  onClick={() => setEditModalTab('qty')}
+                >
+                  Selecting Quantity
+                </button>
+                <button
+                  type="button"
+                  className={`item-edit-tab ${editModalTab === 'price' ? 'active' : ''}`}
+                  onClick={() => setEditModalTab('price')}
+                >
+                  Change Price
+                </button>
+              </div>
+
+              <div className="modal-body" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+                {/* Quantity Section */}
+                {(editModalTab === 'all' || editModalTab === 'qty') && (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <label className="form-label" style={{ marginBottom: 0, fontWeight: '700' }}>
+                        Selecting Quantity
+                      </label>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        Store Stock: {currentItem.stock_quantity}
+                      </span>
+                    </div>
+
+                    {/* Quantity Stepper & Direct Input */}
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '8px' }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ padding: '8px 12px', fontWeight: '800' }}
+                        onClick={() => setNewQty(q => String(Math.max(1, (parseInt(q) || 1) - 5)))}
+                        title="-5"
+                      >
+                        -5
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ padding: '8px 12px', fontWeight: '800' }}
+                        onClick={() => setNewQty(q => String(Math.max(1, (parseInt(q) || 1) - 1)))}
+                        title="-1"
+                      >
+                        -1
+                      </button>
+                      <input
+                        type="number"
+                        min="1"
+                        className="form-input"
+                        style={{ flex: 1, fontSize: '20px', textAlign: 'center', fontWeight: '800', fontFamily: 'var(--font-mono)' }}
+                        value={newQty}
+                        onChange={(e) => setNewQty(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleApplyItemCustomization();
+                          }
+                        }}
+                        autoFocus={editModalTab === 'qty'}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ padding: '8px 12px', fontWeight: '800' }}
+                        onClick={() => setNewQty(q => String(Math.min(currentItem.stock_quantity, (parseInt(q) || 0) + 1)))}
+                        title="+1"
+                      >
+                        +1
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ padding: '8px 12px', fontWeight: '800' }}
+                        onClick={() => setNewQty(q => String(Math.min(currentItem.stock_quantity, (parseInt(q) || 0) + 5)))}
+                        title="+5"
+                      >
+                        +5
+                      </button>
+                    </div>
+
+                    {/* Quick Preset Quantity Chips */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {[1, 2, 3, 4, 5, 10, 12, 20, 50].map(qtyVal => (
+                        <button
+                          key={qtyVal}
+                          type="button"
+                          onClick={() => setNewQty(String(qtyVal))}
+                          className="quick-chip"
+                          style={{
+                            background: parseInt(newQty) === qtyVal ? 'rgba(56, 189, 248, 0.2)' : 'var(--aronium-surface)',
+                            borderColor: parseInt(newQty) === qtyVal ? 'var(--accent-blue)' : 'var(--aronium-border)'
+                          }}
+                        >
+                          {qtyVal}{qtyVal === 12 ? ' (Doz)' : ''}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Wholesale slab hint if applicable */}
+                    {serviceType === 'b2b_wholesale' && currentItem?.slabs?.length > 1 && (
+                      <div style={{ marginTop: '8px', padding: '8px', background: 'var(--aronium-bg)', borderRadius: '4px', fontSize: '11px', border: '1px solid var(--aronium-border)' }}>
+                        <div style={{ fontWeight: '700', color: 'var(--accent-blue)', marginBottom: '3px' }}>Wholesale Volume Slabs:</div>
+                        {currentItem.slabs.map((s, idx) => (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', color: parseInt(newQty) >= s.min_quantity ? '#34d399' : 'var(--text-muted)' }}>
+                            <span>Qty ≥ {s.min_quantity} pcs:</span>
+                            <strong>PKR {s.dealer_price}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Price Section */}
+                {(editModalTab === 'all' || editModalTab === 'price') && (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <label className="form-label" style={{ marginBottom: 0, fontWeight: '700' }}>
+                        Change Unit Price (PKR)
+                      </label>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        Original MRP: <strong>PKR {currentItem.original_price || currentItem.unit_price}</strong>
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                        PKR
+                      </span>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        className="form-input"
+                        style={{ flex: 1, fontSize: '20px', fontWeight: '800', fontFamily: 'var(--font-mono)', color: 'var(--accent-emerald)' }}
+                        value={customPrice}
+                        onChange={(e) => setCustomPrice(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleApplyItemCustomization();
+                          }
+                        }}
+                        autoFocus={editModalTab === 'price'}
+                      />
+                    </div>
+
+                    {/* Price Quick Adjustment Chips */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const orig = Number(currentItem.original_price || currentItem.unit_price);
+                          setCustomPrice(String(Math.max(0, orig - 10)));
+                        }}
+                        className="quick-chip chip-discount"
+                      >
+                        -Rs 10
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const orig = Number(currentItem.original_price || currentItem.unit_price);
+                          setCustomPrice(String(Math.max(0, orig - 20)));
+                        }}
+                        className="quick-chip chip-discount"
+                      >
+                        -Rs 20
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const orig = Number(currentItem.original_price || currentItem.unit_price);
+                          setCustomPrice(String(Math.max(0, Math.round(orig * 0.95))));
+                        }}
+                        className="quick-chip chip-discount"
+                      >
+                        -5%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const orig = Number(currentItem.original_price || currentItem.unit_price);
+                          setCustomPrice(String(Math.max(0, Math.round(orig * 0.90))));
+                        }}
+                        className="quick-chip chip-discount"
+                      >
+                        -10%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const orig = currentItem.original_price || currentItem.unit_price;
+                          setCustomPrice(String(orig));
+                        }}
+                        className="quick-chip chip-reset"
+                        title="Reset back to standard MRP"
+                      >
+                        Reset MRP (Rs {currentItem.original_price || currentItem.unit_price})
+                      </button>
+                    </div>
+
+                    {/* Below cost alert */}
+                    {currentItem.unit_cost && Number(customPrice) < Number(currentItem.unit_cost) && (
+                      <div style={{ marginTop: '8px', fontSize: '11px', color: '#f87171', background: 'rgba(239, 68, 68, 0.1)', padding: '6px 10px', borderRadius: '4px', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+                        ⚠️ Warning: Unit price is below cost (Cost: PKR {currentItem.unit_cost})
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Calculation Preview Banner */}
+                <div style={{
+                  background: 'var(--aronium-bg)',
+                  border: '1px solid var(--aronium-border)',
+                  borderRadius: '6px',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    Total for this Item:
+                  </span>
+                  <span style={{ fontSize: '16px', fontWeight: '800', fontFamily: 'var(--font-mono)', color: 'var(--accent-emerald)' }}>
+                    PKR {((parseInt(newQty) || 1) * (parseFloat(customPrice) || 0)).toFixed(2)}
+                  </span>
+                </div>
+
+              </div>
+
+              <div className="modal-footer">
+                <button onClick={() => { setShowItemEditModal(false); setEditingItem(null); }} className="btn btn-secondary">
+                  Cancel
+                </button>
+                <button onClick={handleApplyItemCustomization} className="btn btn-primary" style={{ gap: '6px' }}>
+                  <Check size={14} />
+                  <span>Apply &amp; Update Cart (Enter)</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ================= MODAL: F2 DISCOUNT ================= */}
       {showDiscountModal && (
